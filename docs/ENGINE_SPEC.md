@@ -8,9 +8,10 @@ Status: spec de reference pour developpement et review.
 - React 18
 - TypeScript
 - Canvas 2D (rendu map)
-- API route serveur: `POST /api/solo/resolve`
+- API routes serveur: `POST /api/solo/start`, `POST /api/solo/action`
+- endpoint brut legacy: `POST /api/solo/resolve`
 - LLM: `groq-sdk` (optionnel)
-- fallback local deterministic si LLM indisponible
+- fallback local heuristique si LLM indisponible
 
 ## 2) Architecture runtime actuelle
 ### Front
@@ -19,9 +20,16 @@ Status: spec de reference pour developpement et review.
 - `app/game/GameClient.tsx`: loop UI + rendering + appel API + apply outcome
 
 ### Back
+- `app/api/solo/start/route.ts`
+  - cree l etat initial serveur
 - `app/api/solo/resolve/route.ts`
   - input: `{ actionText, context }`
   - output: `{ ok, outcome }`
+  - endpoint brut du resolver, encore utile pour debug
+- `app/api/solo/action/route.ts`
+  - input: `{ actionText, state }`
+  - output: `{ ok, outcome, state }`
+  - pipeline runtime principal utilise par le client
 
 ### Core gameplay
 - `lib/solo/types.ts`: modeles
@@ -74,12 +82,13 @@ Status: spec de reference pour developpement et review.
 1. UI recoit texte joueur.
 2. UI ajoute log optimiste.
 3. UI construit `SoloActionContext`.
-4. API `/api/solo/resolve` appelee.
-5. `resolveSoloAction()`:
+4. API `/api/solo/action` appelee.
+5. Le serveur reconstruit `SoloActionContext` depuis le state envoye.
+6. `resolveSoloAction()`:
 - LLM si disponible
 - sinon fallback local
-6. `applyOutcome()` applique la mutation d etat.
-7. UI affiche narration, D20, effets visuels.
+7. `applyOutcome()` applique la mutation d etat.
+8. UI affiche narration, D20, effets visuels.
 
 ## 5) Details `applyOutcome()` (ordre d application)
 Ordre actuel:
@@ -120,7 +129,7 @@ Resolver objet:
 
 ## 8) Persistance
 - localStorage par run:
-  - cle: `freeroll_solo_save_v6_{player}_{run}`
+  - cle: `freeroll_solo_save_v8_{player}_{run}`
 - autosave debounce (`320ms`)
 - reprise auto au chargement
 - reset manuel via bouton rejouer
@@ -132,6 +141,7 @@ Resolver objet:
 3. pas de policy engine (droits, lois, contrats).
 4. event log non structure replay.
 5. interactions complexes encore narratives.
+6. le serveur travaille encore a partir d un snapshot de state envoye par le client.
 
 ## 10) Architecture cible (a implementer)
 Objectif:

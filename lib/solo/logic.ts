@@ -1,4 +1,5 @@
 import { resolveItemAsset } from "./assets";
+import { findShopCatalogEntry } from "./shop";
 import type {
   PoiType,
   SoloActionContext,
@@ -11,7 +12,6 @@ import type {
 } from "./types";
 import { chunkKey, chunkOf, getTile, idxOf, inBounds, poiLabel, terrainLabel } from "./world";
 
-const SHOP_ITEM_COST = 12;
 const MAX_STRESS = 100;
 
 export function buildActionContext(state: SoloGameState): SoloActionContext {
@@ -358,7 +358,7 @@ function nearestAttackableIndex(state: SoloGameState, range: number): number {
   let bestDistance = Number.POSITIVE_INFINITY;
   for (let i = 0; i < state.actors.length; i += 1) {
     const actor = state.actors[i];
-    if (!actor.alive) continue;
+    if (!actor.alive || !actor.hostile) continue;
     const distance = manhattan(actor.x, actor.y, state.player.x, state.player.y);
     if (distance > range) continue;
     if (distance < bestDistance) {
@@ -413,16 +413,22 @@ function buyInventoryItem(state: SoloGameState, name: string, qty: number): void
     return;
   }
 
+  const entry = findShopCatalogEntry(name);
+  if (!entry) {
+    appendLog(state, "SYSTEM: Le marchand ne vend pas cet objet.");
+    return;
+  }
+
   const quantity = Math.max(1, Math.round(qty));
-  const totalCost = SHOP_ITEM_COST * quantity;
+  const totalCost = entry.price * quantity;
   if (state.player.gold < totalCost) {
     appendLog(state, `SYSTEM: Pas assez d or (cout ${totalCost}).`);
     return;
   }
 
   state.player.gold -= totalCost;
-  addInventoryItem(state, name, quantity);
-  appendLog(state, `SYSTEM: Achat de ${name} x${quantity}.`);
+  addInventoryItem(state, entry.name, quantity);
+  appendLog(state, `SYSTEM: Achat de ${entry.name} x${quantity}.`);
 }
 
 function moveTowardPoi(state: SoloGameState, poi: Exclude<PoiType, null>, steps: number): void {

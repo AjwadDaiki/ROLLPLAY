@@ -3,10 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
+    "dev": "node ./node_modules/next/dist/bin/next dev",
+    "build": "node ./node_modules/next/dist/bin/next build",
+    "start": "node ./node_modules/next/dist/bin/next start",
+    "lint": "node ./node_modules/next/dist/bin/next lint",
+    "qa:solo": "node ./node_modules/typescript/bin/tsc -p tsconfig.solo-bug-hunt.json && node ./.codex-solo-bug-hunt/scripts/solo-bug-hunt.js"
   },
   "dependencies": {
     "groq-sdk": "^1.1.1",

@@ -52,18 +52,22 @@
 .topPanel {
   border-radius: 14px;
   border: 1px solid rgba(236, 196, 112, 0.44);
-  background: rgba(11, 16, 30, 0.88);
+  background:
+    linear-gradient(180deg, rgba(16, 23, 40, 0.96), rgba(10, 16, 28, 0.92)),
+    radial-gradient(circle at top left, rgba(240, 196, 108, 0.14), transparent 34%);
   padding: 12px 14px;
   display: grid;
-  grid-template-columns: 280px 1fr 1fr;
+  grid-template-columns: minmax(300px, 360px) minmax(280px, 1fr) minmax(340px, 1.15fr);
   gap: 14px;
   align-items: center;
+  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.18);
 }
 
 .playerCard {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 12px;
 }
 
 .playerFace {
@@ -78,7 +82,7 @@
 .playerMeta {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 6px;
 }
 
 .playerMeta strong {
@@ -101,17 +105,82 @@
   image-rendering: pixelated;
 }
 
+.hearts img[data-empty="1"] {
+  opacity: 0.22;
+  filter: grayscale(1);
+}
+
+.lifeRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lifeText {
+  color: #f4d89f;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.vitalMeter,
+.stressMeter {
+  display: grid;
+  gap: 4px;
+}
+
+.vitalMeter span,
+.stressMeter span {
+  color: #d9e4ff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.vitalMeterTrack,
+.stressMeterTrack {
+  position: relative;
+  height: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid rgba(162, 184, 225, 0.32);
+  background: rgba(11, 17, 30, 0.96);
+}
+
+.vitalMeterFill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #f16f67 0%, #ffba7d 100%);
+  box-shadow: 0 0 14px rgba(241, 111, 103, 0.34);
+}
+
+.stressMeterFill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #6ec6ff 0%, #ffb54f 60%, #f36d5e 100%);
+  box-shadow: 0 0 14px rgba(111, 190, 255, 0.26);
+}
+
+.stressMeter[data-tone="warn"] .stressMeterFill {
+  box-shadow: 0 0 14px rgba(255, 181, 79, 0.34);
+}
+
+.stressMeter[data-tone="danger"] .stressMeterFill {
+  box-shadow: 0 0 16px rgba(243, 109, 94, 0.42);
+}
+
 .statsRow {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  align-content: center;
 }
 
 .statsRow > div {
-  border-radius: 999px;
+  border-radius: 16px;
   border: 1px solid rgba(221, 181, 98, 0.48);
-  background: linear-gradient(180deg, rgba(24, 34, 56, 0.95), rgba(16, 24, 41, 0.9));
-  padding: 7px 12px;
+  background:
+    linear-gradient(180deg, rgba(24, 34, 56, 0.95), rgba(16, 24, 41, 0.9)),
+    radial-gradient(circle at top left, rgba(255, 227, 163, 0.12), transparent 38%);
+  padding: 8px 13px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -121,6 +190,10 @@
   box-shadow: inset 0 0 0 1px rgba(95, 126, 194, 0.18);
 }
 
+.statsRow > div[data-accent="hp"] {
+  border-color: rgba(255, 157, 134, 0.52);
+}
+
 .statsRow img {
   width: 16px;
   height: 16px;
@@ -128,13 +201,15 @@
 }
 
 .objective {
-  border-radius: 10px;
+  border-radius: 14px;
   border: 1px solid rgba(145, 165, 211, 0.42);
-  background: rgba(17, 26, 45, 0.82);
-  padding: 10px;
+  background:
+    linear-gradient(180deg, rgba(18, 28, 48, 0.96), rgba(12, 20, 35, 0.9)),
+    radial-gradient(circle at top right, rgba(242, 198, 106, 0.12), transparent 34%);
+  padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
 }
 
 .objective small {
@@ -147,7 +222,51 @@
 .objective strong {
   color: #ffe2ab;
   line-height: 1.35;
-  font-size: 14px;
+  font-size: 15px;
+}
+
+.objectiveDetail {
+  border-radius: 10px;
+  border: 1px solid rgba(136, 159, 206, 0.24);
+  background: rgba(10, 18, 31, 0.78);
+  padding: 8px 9px;
+  display: grid;
+  gap: 3px;
+}
+
+.objectiveDetail span {
+  color: #8fa4d2;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.objectiveDetail p {
+  color: #dde6fb;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.objectiveActions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.objectiveActions button {
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid rgba(242, 198, 106, 0.64);
+  background: rgba(44, 34, 13, 0.88);
+  color: #ffe5b0;
+  padding: 0 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.objectiveActions button:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
 }
 
 .mainZone {
@@ -239,6 +358,7 @@
   image-rendering: pixelated;
   margin-inline: auto;
   align-self: center;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.28);
 }
 
 .combatWheelOverlay {
@@ -336,7 +456,7 @@
 .narratorCard {
   min-height: 0;
   display: grid;
-  grid-template-rows: auto auto auto auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto auto auto auto minmax(0, 1fr);
   gap: 9px;
   padding: 12px;
   overflow: hidden;
@@ -352,7 +472,7 @@
   background: rgba(47, 34, 12, 0.62);
   color: #ffe9c3;
   padding: 9px;
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.4;
   font-weight: 700;
 }
@@ -365,6 +485,29 @@
   padding: 11px;
   line-height: 1.5;
   font-size: 14px;
+}
+
+.intentCard {
+  border-radius: 10px;
+  border: 1px solid rgba(104, 188, 238, 0.34);
+  background: rgba(10, 24, 37, 0.78);
+  padding: 10px;
+  display: grid;
+  gap: 4px;
+}
+
+.intentCard small {
+  color: #88bad9;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.intentCard strong {
+  color: #dff3ff;
+  line-height: 1.45;
+  font-size: 13px;
 }
 
 .shopPanel {
@@ -479,11 +622,54 @@
   padding: 9px;
 }
 
-.logPanel p {
+.logLine {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+  align-items: start;
   color: #d8e1fb;
-  line-height: 1.4;
+  line-height: 1.45;
   font-size: 13px;
-  margin-bottom: 5px;
+  margin-bottom: 7px;
+}
+
+.logTag {
+  min-width: 58px;
+  color: #8fa4d2;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.logSystem .logTag,
+.logSystem {
+  color: #d9e6ff;
+}
+
+.logMj .logTag,
+.logMj {
+  color: #ffe4b1;
+}
+
+.logEvent .logTag,
+.logEvent {
+  color: #ffbf8a;
+}
+
+.logPlayer .logTag,
+.logPlayer {
+  color: #8bd9ff;
+}
+
+.logNpc .logTag,
+.logNpc {
+  color: #cfe7ae;
+}
+
+.logMisc .logTag,
+.logMisc {
+  color: #bfcbe4;
 }
 
 .pending {
@@ -576,6 +762,45 @@
   cursor: not-allowed;
 }
 
+.inputHints {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.suggestionRail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.suggestionChip {
+  min-height: 32px;
+  border-radius: 999px;
+  border: 1px solid rgba(154, 176, 223, 0.42);
+  background: rgba(18, 28, 47, 0.92);
+  color: #dce7ff;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.suggestionChip:hover {
+  border-color: rgba(242, 198, 106, 0.74);
+  color: #ffe3a6;
+}
+
+.suggestionChip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.inputHintText {
+  color: #99afd9;
+  font-size: 12px;
+}
+
 .overlay {
   position: fixed;
   inset: 0;
@@ -606,6 +831,81 @@
   display: grid;
   gap: 10px;
   animation: contextPop 180ms ease-out;
+}
+
+.eventOverlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(7, 11, 20, 0.52);
+  z-index: 23;
+}
+
+.eventCard {
+  width: min(560px, 94vw);
+  border-radius: 18px;
+  border: 1px solid rgba(240, 199, 112, 0.68);
+  background: rgba(12, 18, 31, 0.97);
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.5);
+  padding: 22px 20px;
+  display: grid;
+  gap: 10px;
+  animation: eventRise 220ms ease-out;
+}
+
+.eventCard small {
+  color: #9db2df;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.eventCard strong {
+  color: #ffe6b4;
+  font-size: clamp(24px, 4vw, 38px);
+  line-height: 1.05;
+}
+
+.eventCard p {
+  color: #deebff;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.eventCard button {
+  justify-self: start;
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid rgba(242, 198, 106, 0.72);
+  background: rgba(45, 34, 13, 0.9);
+  color: #ffe5b0;
+  padding: 0 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.eventCard[data-tone="danger"] {
+  border-color: rgba(244, 128, 118, 0.7);
+  background:
+    linear-gradient(180deg, rgba(41, 15, 18, 0.97), rgba(19, 9, 14, 0.95)),
+    radial-gradient(circle at top, rgba(244, 128, 118, 0.12), transparent 38%);
+}
+
+.eventCard[data-tone="arcane"] {
+  border-color: rgba(116, 202, 244, 0.64);
+  background:
+    linear-gradient(180deg, rgba(13, 28, 44, 0.98), rgba(9, 18, 31, 0.95)),
+    radial-gradient(circle at top, rgba(116, 202, 244, 0.14), transparent 42%);
+}
+
+.eventCard[data-tone="reward"],
+.eventCard[data-tone="victory"] {
+  background:
+    linear-gradient(180deg, rgba(38, 29, 12, 0.98), rgba(18, 15, 8, 0.95)),
+    radial-gradient(circle at top, rgba(242, 198, 106, 0.16), transparent 42%);
 }
 
 .contextCard header {
@@ -761,6 +1061,17 @@
   to {
     opacity: 1;
     transform: scale(1);
+  }
+}
+
+@keyframes eventRise {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
 }
 

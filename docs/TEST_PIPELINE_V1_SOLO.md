@@ -73,13 +73,13 @@ But: verifier la demo de bout en bout, sans zones grises.
 - PV cibles/joueur changes
 - mort possible + drop + or
 
-## 9) Maison / Donjon / Boss visual mode
-1. Aller sur POI maison
+## 9) Donjon / Boss visual mode
+1. Aller vers donjon
 2. Verifier:
-- rendu map change (mode interieur)
-3. Aller vers donjon
-4. Verifier:
 - rendu map mode donjon
+3. Aller vers la zone boss
+4. Verifier:
+- rendu map zone boss
 5. Lancer combat
 6. Verifier:
 - scene combat distincte

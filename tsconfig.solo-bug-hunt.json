@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "./.codex-solo-bug-hunt",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "target": "es2022",
+    "incremental": false,
+    "allowJs": false
+  },
+  "include": ["scripts/solo-bug-hunt.ts", "lib/solo/**/*.ts"],
+  "exclude": ["node_modules", ".next", ".codex-solo-bug-hunt"]
+}

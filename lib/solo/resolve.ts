@@ -1,5 +1,6 @@
 import Groq from "groq-sdk";
 import { buildStoryLine } from "./logic";
+import { findShopCatalogEntry, renderShopStockList } from "./shop";
 import type { PoiType, SoloOutcome, SoloResolveRequest, SpawnActor, TerrainChange } from "./types";
 
 const MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
@@ -10,8 +11,6 @@ const MONSTER_SPAWN_FALLBACK = {
     "/assets/Ninja Adventure - Asset Pack/Ninja Adventure - Asset Pack/Actor/Characters/Skeleton/SeparateAnim/Walk.png",
   face: "/assets/Ninja Adventure - Asset Pack/Ninja Adventure - Asset Pack/Actor/Characters/Skeleton/Faceset.png",
 };
-
-const SHOP_STOCK_LIST = "Stock: potion de soin, torche, corde, epee de base, ration.";
 
 type ActionIntent = {
   wantsMove: boolean;
@@ -300,7 +299,7 @@ function postProcessOutcome(outcome: SoloOutcome, input: SoloResolveRequest): So
 
   if (intent.asksList && intent.wantsShop) {
     next.talkToNearestNpc = true;
-    next.npcSpeech = SHOP_STOCK_LIST;
+    next.npcSpeech = renderShopStockList();
     if (!isNearPoi(ctx, "shop")) {
       next.moveToPoi = "shop";
       next.moveToPoiSteps = 6;
@@ -316,13 +315,36 @@ function postProcessOutcome(outcome: SoloOutcome, input: SoloResolveRequest): So
     next.narrative = "Tu te mets en route vers la boutique avant d acheter.";
   }
 
+  if (intent.wantsBuy && !isNearPoi(ctx, "shop")) {
+    next.buyItemName = null;
+    if (!next.moveToPoi) {
+      next.moveToPoi = "shop";
+      next.moveToPoiSteps = 6;
+    }
+    next.narrative = "Tu te diriges d abord vers la boutique. L achat viendra une fois sur place.";
+  }
+
+  if (intent.wantsBuy && next.buyItemName) {
+    const entry = findShopCatalogEntry(next.buyItemName);
+    if (entry) {
+      next.buyItemName = entry.name;
+    } else {
+      next.buyItemName = null;
+      if (isNearPoi(ctx, "shop")) {
+        next.talkToNearestNpc = true;
+        next.npcSpeech = renderShopStockList();
+        next.narrative = "Le marchand ne vend pas cet objet. Il te montre son vrai stock.";
+      }
+    }
+  }
+
   if (intent.wantsQuest && !isNearPoi(ctx, "guild") && !next.moveToPoi) {
     next.moveToPoi = "guild";
     next.moveToPoiSteps = 6;
     next.narrative = "Tu cherches la guilde pour recuperer une mission.";
   }
 
-  if (intent.wantsRest && !isNearPoi(ctx, "inn") && !next.moveToPoi) {
+  if (intent.wantsRest && !intent.wantsBuy && !isNearPoi(ctx, "inn") && !next.moveToPoi) {
     next.moveToPoi = "inn";
     next.moveToPoiSteps = 5;
     next.narrative = "Tu avances vers l auberge pour recuperer.";
@@ -471,7 +493,7 @@ function resolveLocally(input: SoloResolveRequest): SoloOutcome {
 
   if (intent.wantsShop && intent.asksList) {
     outcome.talkToNearestNpc = true;
-    outcome.npcSpeech = SHOP_STOCK_LIST;
+    outcome.npcSpeech = renderShopStockList();
     if (!isNearPoi(ctx, "shop")) {
       outcome.moveToPoi = "shop";
       outcome.moveToPoiSteps = 6;
@@ -494,9 +516,16 @@ function resolveLocally(input: SoloResolveRequest): SoloOutcome {
 
   if (intent.wantsBuy) {
     if (isNearPoi(ctx, "shop")) {
-      const itemName = extractItemName(text, ["acheter", "achete", "buy", "shop", "boutique", "prends"]);
-      outcome.buyItemName = itemName || "potion de soin";
-      outcome.narrative = `Le marchand te vend ${outcome.buyItemName}.`;
+      const requestedName = extractItemName(text, ["acheter", "achete", "buy", "shop", "boutique", "prends"]);
+      const entry = findShopCatalogEntry(requestedName || "potion de soin");
+      if (entry) {
+        outcome.buyItemName = entry.name;
+        outcome.narrative = `Le marchand te vend ${entry.name}.`;
+      } else {
+        outcome.talkToNearestNpc = true;
+        outcome.npcSpeech = renderShopStockList();
+        outcome.narrative = "Le marchand secoue la tete: cet objet n est pas en stock.";
+      }
     } else {
       outcome.moveToPoi = "shop";
       outcome.moveToPoiSteps = 6;
@@ -509,7 +538,6 @@ function resolveLocally(input: SoloResolveRequest): SoloOutcome {
       "prend",
       "ramasse",
       "obtiens",
-      "demande",
       "forge",
       "craft",
       "cree",
@@ -520,7 +548,7 @@ function resolveLocally(input: SoloResolveRequest): SoloOutcome {
     outcome.narrative = `Le monde repond: ${outcome.addItemName} rejoint ton inventaire.`;
   }
 
-  if (intent.wantsRest) {
+  if (intent.wantsRest && !intent.wantsBuy) {
     if (!isNearPoi(ctx, "inn")) {
       outcome.moveToPoi = "inn";
       outcome.moveToPoiSteps = 5;
@@ -613,10 +641,10 @@ function parseIntent(text: string): ActionIntent {
     wantsApproachHostile: /squelette|skeleton|goblin|monstre|demon|loup/.test(text) && /voir|aller|vais|va |rejoins|rejoindre|chercher|trouver/.test(text),
     wantsDestroy: /detrui|casse|coupe|explose|ruine|rase/.test(text),
     wantsBuy: /achete|acheter|buy|commande/.test(text),
-    wantsLoot: /prend|ramasse|obtiens|demande|forge|craft|cree|invoque|fabrique/.test(text),
-    wantsRest: /repos|dors|auberge|soin|heal/.test(text),
+    wantsLoot: /prend|ramasse|obtiens|forge|craft|cree|invoque|fabrique/.test(text),
+    wantsRest: /repos|repose|dors|auberge|inn|heal|soigne|soigner|recupere|recuperer/.test(text),
     wantsTalk: /parle|discute|questionne|negocie|dialogue|demande/.test(text),
-    wantsQuest: /quete|guilde|mission|tableau|contrat/.test(text),
+    wantsQuest: /quete|mission|tableau|contrat/.test(text),
     wantsObjective: /objectif|changer mission|nouvel objectif/.test(text),
     wantsShop: /shop|boutique|marchand|vendeur/.test(text),
     wantsGuild: /guilde/.test(text),

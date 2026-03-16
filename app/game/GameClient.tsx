@@ -5,7 +5,8 @@
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { applyOutcome, buildActionContext, buildStoryLine, describeLocation } from "@/lib/solo/logic";
-import type { InventoryItem, SoloGameState, SoloOutcome, WorldActor } from "@/lib/solo/types";
+import { SHOP_CATALOG } from "@/lib/solo/shop";
+import type { InventoryItem, PoiType, SoloGameState, SoloOutcome, WorldActor } from "@/lib/solo/types";
 import { CHUNK_SIZE } from "@/lib/solo/types";
 import {
   actorsInChunk,
@@ -23,13 +24,6 @@ const MAP_PX = CHUNK_SIZE * TILE_PX;
 const SAVE_DEBOUNCE_MS = 320;
 const SLIDE_MS = 220;
 const REQUEST_TIMEOUT_MS = 9000;
-
-const SHOP_CATALOG = [
-  { name: "Potion de soin", price: 12 },
-  { name: "Torche", price: 12 },
-  { name: "Corde solide", price: 12 },
-  { name: "Epee de base", price: 12 },
-];
 
 const BASE_ASSETS = {
   field:
@@ -125,17 +119,53 @@ type WanderState = {
 type PlayerRenderState = {
   x: number;
   y: number;
+  fromX: number;
+  fromY: number;
+  moveStartAt: number;
+  moveEndAt: number;
   facing: Facing;
-  movingUntil: number;
 };
 
-type SceneMode = "world" | "house" | "dungeon" | "boss";
+type SceneMode = "world" | "dungeon" | "boss";
 
 type ContextPanel = "shop" | "guild" | null;
 
 type GoldFx = {
   delta: number;
   startedAt: number;
+};
+
+type TrailEntry = {
+  x: number;
+  y: number;
+  chunkKey: string;
+  startedAt: number;
+};
+
+type MajorEventTone = "danger" | "arcane" | "reward" | "victory";
+
+type MajorEventCard = {
+  id: string;
+  title: string;
+  body: string;
+  tone: MajorEventTone;
+};
+
+type DeathFx = {
+  id: string;
+  x: number;
+  y: number;
+  chunkKey: string;
+  startedAt: number;
+  hostile: boolean;
+  name: string;
+};
+
+type ObjectiveLens = {
+  primary: string;
+  step: string;
+  suggestion: string;
+  targetPoi: Exclude<PoiType, null> | null;
 };
 
 export default function GameClient() {
@@ -170,16 +200,24 @@ export default function GameClient() {
   const [contextPanel, setContextPanel] = useState<ContextPanel>(null);
   const [goldFx, setGoldFx] = useState<GoldFx | null>(null);
   const [pinnedActorId, setPinnedActorId] = useState<string | null>(null);
+  const [intentSummary, setIntentSummary] = useState("Explore le village ou parle a un PNJ.");
+  const [majorEvent, setMajorEvent] = useState<MajorEventCard | null>(null);
+  const [focusedPoi, setFocusedPoi] = useState<Exclude<PoiType, null> | null>(null);
+  const [deathFx, setDeathFx] = useState<DeathFx[]>([]);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const logRef = useRef<HTMLDivElement | null>(null);
   const saveTimerRef = useRef<number | null>(null);
   const rafRef = useRef<number | null>(null);
   const diceTimerRef = useRef<number | null>(null);
+  const contextPanelTimerRef = useRef<number | null>(null);
   const previousChunkRef = useRef<{ cx: number; cy: number } | null>(null);
   const imageCacheRef = useRef<Map<string, HTMLImageElement>>(new Map());
   const wanderRef = useRef<Map<string, WanderState>>(new Map());
   const playerRenderRef = useRef<PlayerRenderState | null>(null);
+  const trailRef = useRef<TrailEntry[]>([]);
+  const previousPlayerTileRef = useRef<{ x: number; y: number; cx: number; cy: number } | null>(null);
+  const focusPoiTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     setBootError(null);
@@ -278,8 +316,11 @@ export default function GameClient() {
       playerRenderRef.current = {
         x: state.player.x,
         y: state.player.y,
+        fromX: state.player.x,
+        fromY: state.player.y,
+        moveStartAt: now,
+        moveEndAt: now,
         facing: "down",
-        movingUntil: 0,
       };
       return;
     }
@@ -294,11 +335,49 @@ export default function GameClient() {
     }
 
     const movedTiles = Math.abs(dx) + Math.abs(dy);
+    const animateMove = movedTiles > 0 && movedTiles <= 2;
     playerRenderRef.current = {
       x: state.player.x,
       y: state.player.y,
+      fromX: animateMove ? prev.x : state.player.x,
+      fromY: animateMove ? prev.y : state.player.y,
+      moveStartAt: now,
+      moveEndAt: animateMove ? now + 240 + movedTiles * 85 : now,
       facing,
-      movingUntil: movedTiles > 0 ? now + 280 + movedTiles * 120 : prev.movingUntil,
+    };
+  }, [state]);
+
+  useEffect(() => {
+    if (!state) return;
+    const { cx, cy } = chunkOf(state.player.x, state.player.y);
+    const previous = previousPlayerTileRef.current;
+
+    if (!previous || previous.cx !== cx || previous.cy !== cy) {
+      trailRef.current = [
+        {
+          x: state.player.x,
+          y: state.player.y,
+          chunkKey: `${cx}_${cy}`,
+          startedAt: Date.now(),
+        },
+      ];
+    } else if (previous.x !== state.player.x || previous.y !== state.player.y) {
+      trailRef.current = [
+        ...trailRef.current.filter((entry) => entry.chunkKey === `${cx}_${cy}`),
+        {
+          x: state.player.x,
+          y: state.player.y,
+          chunkKey: `${cx}_${cy}`,
+          startedAt: Date.now(),
+        },
+      ].slice(-20);
+    }
+
+    previousPlayerTileRef.current = {
+      x: state.player.x,
+      y: state.player.y,
+      cx,
+      cy,
     };
   }, [state]);
 
@@ -374,7 +453,10 @@ export default function GameClient() {
           playerRenderRef.current,
           sceneMode,
           worldPaused,
-          pinnedActorId
+          pinnedActorId,
+          trailRef.current,
+          focusedPoi,
+          deathFx
         );
         drawChunkScene(
           ctx,
@@ -390,7 +472,10 @@ export default function GameClient() {
           playerRenderRef.current,
           sceneMode,
           worldPaused,
-          pinnedActorId
+          pinnedActorId,
+          trailRef.current,
+          focusedPoi,
+          deathFx
         );
 
         if (progress >= 1) {
@@ -411,7 +496,10 @@ export default function GameClient() {
           playerRenderRef.current,
           sceneMode,
           worldPaused,
-          pinnedActorId
+          pinnedActorId,
+          trailRef.current,
+          focusedPoi,
+          deathFx
         );
       }
 
@@ -422,7 +510,7 @@ export default function GameClient() {
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [assetsReady, battleFx, bubble, busy, diceRolling, pinnedActorId, state, transition]);
+  }, [assetsReady, battleFx, bubble, busy, deathFx, diceRolling, focusedPoi, pinnedActorId, state, transition]);
 
   useEffect(() => {
     if (!state || !logRef.current) return;
@@ -454,9 +542,29 @@ export default function GameClient() {
   }, [goldFx]);
 
   useEffect(() => {
+    if (!majorEvent) return;
+    const timer = window.setTimeout(() => setMajorEvent(null), 3600);
+    return () => window.clearTimeout(timer);
+  }, [majorEvent]);
+
+  useEffect(() => {
+    if (deathFx.length === 0) return;
+    const timer = window.setTimeout(() => {
+      setDeathFx((prev) => prev.filter((entry) => Date.now() - entry.startedAt < 900));
+    }, 920);
+    return () => window.clearTimeout(timer);
+  }, [deathFx]);
+
+  useEffect(() => {
     return () => {
       if (diceTimerRef.current !== null) {
         window.clearInterval(diceTimerRef.current);
+      }
+      if (contextPanelTimerRef.current !== null) {
+        window.clearTimeout(contextPanelTimerRef.current);
+      }
+      if (focusPoiTimerRef.current !== null) {
+        window.clearTimeout(focusPoiTimerRef.current);
       }
     };
   }, []);
@@ -480,6 +588,10 @@ export default function GameClient() {
   const nearShop = state ? hasPoiNearby(state, "shop", 1) : false;
   const nearGuild = state ? hasPoiNearby(state, "guild", 1) : false;
   const rank = state ? state.player.rank || computeRankFromQuests(state) : "C";
+  const objectiveLens = state ? deriveObjectiveLens(state) : null;
+  const actionSuggestions = state && objectiveLens ? buildActionSuggestions(state, objectiveLens) : [];
+  const hpPercent = state ? clamp((state.player.hp / Math.max(1, state.player.maxHp)) * 100, 0, 100) : 0;
+  const stressPercent = state ? clamp((state.player.stress / 100) * 100, 0, 100) : 0;
 
   useEffect(() => {
     if (contextPanel === "shop" && !nearShop) {
@@ -522,17 +634,38 @@ export default function GameClient() {
     setLastDice(finalRoll);
   }
 
+  function focusPoi(poi: Exclude<PoiType, null> | null): void {
+    if (!poi) return;
+    if (state) {
+      const hint = describePoiDirection(state, poi);
+      if (hint) {
+        setIntentSummary(`${poiDisplayName(poi)}: ${hint}`);
+      }
+    }
+    setFocusedPoi(poi);
+    if (focusPoiTimerRef.current !== null) {
+      window.clearTimeout(focusPoiTimerRef.current);
+    }
+    focusPoiTimerRef.current = window.setTimeout(() => {
+      setFocusedPoi(null);
+      focusPoiTimerRef.current = null;
+    }, 2200);
+  }
+
   async function submitAction(override?: string): Promise<void> {
     if (!state || busy || state.status !== "playing") return;
     const text = (override ?? actionText).trim();
     if (!text) return;
     const normalizedText = normalizeText(text);
+    setIntentSummary(describeTypedIntent(state, text));
 
     setBusy(true);
     setActionText("");
     startDiceAnimation();
 
     const storyline = buildStoryLine(state.player.name, text);
+    const wasNearShop = hasPoiNearby(state, "shop", 1);
+    const wasNearGuild = hasPoiNearby(state, "guild", 1);
     const optimistic: SoloGameState = {
       ...state,
       log: [...state.log, `TOI: ${text}`],
@@ -574,6 +707,7 @@ export default function GameClient() {
           : applyOutcome(optimistic, outcome);
       await stopDiceAnimation(typeof outcome.diceRoll === "number" ? outcome.diceRoll : null);
       setState(next);
+      setIntentSummary(describeResolvedIntent(text, outcome, next));
 
       const deltaGold = next.player.gold - optimistic.player.gold;
       if (deltaGold !== 0) {
@@ -584,10 +718,29 @@ export default function GameClient() {
       }
 
       const lowered = normalizedText;
-      if (/shop|boutique/.test(lowered) && hasPoiNearby(next, "shop", 1)) {
-        setContextPanel("shop");
-      } else if (/guilde|quete|quest/.test(lowered) && hasPoiNearby(next, "guild", 1)) {
-        setContextPanel("guild");
+      const nearShopAfter = hasPoiNearby(next, "shop", 1);
+      const nearGuildAfter = hasPoiNearby(next, "guild", 1);
+      if (contextPanelTimerRef.current !== null) {
+        window.clearTimeout(contextPanelTimerRef.current);
+        contextPanelTimerRef.current = null;
+      }
+
+      const shouldOpenShopPanel =
+        isShopIntent(lowered) &&
+        nearShopAfter &&
+        (!outcome.buyItemName || !wasNearShop);
+      if (shouldOpenShopPanel) {
+        const delay = !wasNearShop && nearShopAfter ? 260 : 0;
+        contextPanelTimerRef.current = window.setTimeout(() => {
+          setContextPanel("shop");
+          contextPanelTimerRef.current = null;
+        }, delay);
+      } else if (isGuildIntent(lowered) && nearGuildAfter && (!outcome.requestQuest || !wasNearGuild)) {
+        const delay = !wasNearGuild && nearGuildAfter ? 220 : 0;
+        contextPanelTimerRef.current = window.setTimeout(() => {
+          setContextPanel("guild");
+          contextPanelTimerRef.current = null;
+        }, delay);
       }
 
       const gainedItem = findGainedItem(optimistic.player.inventory, next.player.inventory);
@@ -597,6 +750,28 @@ export default function GameClient() {
           name: gainedItem.name,
           startedAt: Date.now(),
         });
+      }
+
+      const deaths = findNewlyDeadActors(optimistic, next);
+      if (deaths.length > 0) {
+        const startedAt = Date.now();
+        setDeathFx((prev) => [
+          ...prev,
+          ...deaths.map((actor, index) => ({
+            id: `${actor.id}_${next.turn}_${index}`,
+            x: actor.x,
+            y: actor.y,
+            chunkKey: `${chunkOf(actor.x, actor.y).cx}_${chunkOf(actor.x, actor.y).cy}`,
+            startedAt,
+            hostile: actor.hostile,
+            name: actor.name,
+          })),
+        ].slice(-10));
+      }
+
+      const eventCard = detectMajorEventCard(optimistic, next, outcome, text);
+      if (eventCard) {
+        setMajorEvent(eventCard);
       }
 
       const enemyAfter = outcome.attackNearestHostile ? nearestVisibleHostile(next, 4) : null;
@@ -649,12 +824,14 @@ export default function GameClient() {
       }
     } catch {
       await stopDiceAnimation(null);
-      const fallback = applyOutcome(optimistic, {
+      const fallbackOutcome: SoloOutcome = {
         narrative: "Erreur reseau temporaire. Reessaie.",
         storyLine: storyline,
         diceRoll: null,
-      });
+      };
+      const fallback = applyOutcome(optimistic, fallbackOutcome);
       setState(fallback);
+      setIntentSummary(describeResolvedIntent(text, fallbackOutcome, fallback));
     } finally {
       setBusy(false);
     }
@@ -762,10 +939,30 @@ export default function GameClient() {
           <div className={styles.playerMeta}>
             <strong>{state.player.name}</strong>
             <small>Scenario {scenario.toUpperCase()} - Tour {state.turn}</small>
-            <div className={styles.hearts}>
-              {Array.from({ length: state.player.lives }).map((_, index) => (
-                <img key={`heart_${index}`} src={BASE_ASSETS.heart} alt="vie" />
-              ))}
+            <div className={styles.lifeRow}>
+              <div className={styles.hearts}>
+                {Array.from({ length: state.player.maxLives }).map((_, index) => (
+                  <img
+                    key={`heart_${index}`}
+                    src={BASE_ASSETS.heart}
+                    alt="vie"
+                    data-empty={index >= state.player.lives ? "1" : "0"}
+                  />
+                ))}
+              </div>
+              <span className={styles.lifeText}>{state.player.lives}/{state.player.maxLives} vies</span>
+            </div>
+            <div className={styles.vitalMeter}>
+              <div className={styles.vitalMeterTrack}>
+                <div className={styles.vitalMeterFill} style={{ width: `${hpPercent}%` }} />
+              </div>
+              <span>PV {state.player.hp}/{state.player.maxHp}</span>
+            </div>
+            <div className={styles.stressMeter} data-tone={state.player.stress >= 70 ? "danger" : state.player.stress >= 35 ? "warn" : "calm"}>
+              <div className={styles.stressMeterTrack}>
+                <div className={styles.stressMeterFill} style={{ width: `${stressPercent}%` }} />
+              </div>
+              <span>Stress {state.player.stress}/100</span>
             </div>
           </div>
         </div>
@@ -786,14 +983,31 @@ export default function GameClient() {
           <div>
             <span>RANG {rank}</span>
           </div>
-          <div>
+          <div data-accent="hp">
             <span>PV {state.player.hp}/{state.player.maxHp}</span>
           </div>
         </div>
 
         <div className={styles.objective}>
-          <small>Objectif</small>
-          <strong>{state.player.objective}</strong>
+          <small>Grand objectif</small>
+          <strong>{objectiveLens?.primary ?? state.player.objective}</strong>
+          <div className={styles.objectiveDetail}>
+            <span>Etape</span>
+            <p>{objectiveLens?.step ?? "Observe le monde et choisis ta prochaine action."}</p>
+          </div>
+          <div className={styles.objectiveDetail}>
+            <span>Suggestion</span>
+            <p>{objectiveLens?.suggestion ?? "Explore les points d interet visibles."}</p>
+          </div>
+          <div className={styles.objectiveActions}>
+            <button
+              type="button"
+              onClick={() => focusPoi(objectiveLens?.targetPoi ?? null)}
+              disabled={!objectiveLens?.targetPoi || busy}
+            >
+              Afficher la destination
+            </button>
+          </div>
         </div>
       </section>
 
@@ -856,6 +1070,10 @@ export default function GameClient() {
           <h3>Narrateur MJ</h3>
           <div className={styles.storyLine}>{state.lastAction}</div>
           <div className={styles.narration}>{state.lastNarration}</div>
+          <div className={styles.intentCard}>
+            <small>Intention comprise</small>
+            <strong>{intentSummary}</strong>
+          </div>
 
           <div className={styles.contextButtons}>
             <button
@@ -891,10 +1109,19 @@ export default function GameClient() {
 
           {activePanel === "log" ? (
             <div ref={logRef} className={styles.logPanel}>
-              {state.log.map((line, index) => (
-                <p key={`${index}_${line.slice(0, 18)}`}>{line}</p>
-              ))}
-              {busy ? <p className={styles.pending}>MJ: resolution...</p> : null}
+              {state.log.map((line, index) => {
+                const entry = parseLogEntry(line);
+                return (
+                  <p
+                    key={`${index}_${line.slice(0, 18)}`}
+                    className={`${styles.logLine} ${styles[entry.className] ?? ""}`}
+                  >
+                    <span className={styles.logTag}>{entry.tag}</span>
+                    <span>{entry.body}</span>
+                  </p>
+                );
+              })}
+              {busy ? <p className={`${styles.logLine} ${styles.pending}`}>MJ: resolution...</p> : null}
             </div>
           ) : (
             <div className={styles.inventoryPanel}>
@@ -950,7 +1177,7 @@ export default function GameClient() {
             disabled={busy || state.status !== "playing"}
             placeholder={
               state.status === "playing"
-                ? "Ecris n importe quelle action..."
+                ? `Ex: ${actionSuggestions[0] ?? "je vais a la guilde"}`
                 : "Partie terminee."
             }
           />
@@ -960,6 +1187,24 @@ export default function GameClient() {
           >
             Lancer D20 et resoudre
           </button>
+        </div>
+        <div className={styles.inputHints}>
+          <div className={styles.suggestionRail}>
+            {actionSuggestions.map((entry) => (
+              <button
+                key={entry}
+                type="button"
+                className={styles.suggestionChip}
+                disabled={busy || state.status !== "playing"}
+                onClick={() => void submitAction(entry)}
+              >
+                {entry}
+              </button>
+            ))}
+          </div>
+          <p className={styles.inputHintText}>
+            Entree pour agir. Tu peux ecrire librement, mais les suggestions donnent les commandes les plus utiles maintenant.
+          </p>
         </div>
       </section>
 
@@ -997,13 +1242,26 @@ export default function GameClient() {
                       disabled={busy || quest.done}
                       onClick={() => void submitAction(`je prends la quete ${quest.title}`)}
                     >
-                      <span>{quest.done ? `✓ ${quest.title}` : quest.title}</span>
+                      <span>{quest.done ? `Terminee - ${quest.title}` : quest.title}</span>
                       <em>{quest.rank}</em>
                     </button>
                   </li>
                 ))}
               </ul>
             )}
+          </div>
+        </div>
+      ) : null}
+
+      {majorEvent && state.status === "playing" ? (
+        <div className={styles.eventOverlay}>
+          <div className={styles.eventCard} data-tone={majorEvent.tone}>
+            <small>Evenement majeur</small>
+            <strong>{majorEvent.title}</strong>
+            <p>{majorEvent.body}</p>
+            <button type="button" onClick={() => setMajorEvent(null)}>
+              Continuer
+            </button>
           </div>
         </div>
       ) : null}
@@ -1052,6 +1310,14 @@ function hasPoiNearby(
     }
   }
   return false;
+}
+
+function isShopIntent(text: string): boolean {
+  return /(shop|boutique|marchand|acheter|achete|buy|commande)/.test(text);
+}
+
+function isGuildIntent(text: string): boolean {
+  return /(guilde|quete|quest|mission|contrat)/.test(text);
 }
 
 function findGainedItem(before: InventoryItem[], after: InventoryItem[]): InventoryItem | null {
@@ -1215,6 +1481,398 @@ function manhattan(ax: number, ay: number, bx: number, by: number): number {
   return Math.abs(ax - bx) + Math.abs(ay - by);
 }
 
+function getPlayerRenderPose(
+  render: PlayerRenderState | null,
+  now: number
+): { x: number; y: number; facing: Facing; moving: boolean } {
+  if (!render) {
+    return { x: 0, y: 0, facing: "down", moving: false };
+  }
+  const duration = Math.max(1, render.moveEndAt - render.moveStartAt);
+  const t = clamp((now - render.moveStartAt) / duration, 0, 1);
+  return {
+    x: lerp(render.fromX, render.x, t),
+    y: lerp(render.fromY, render.y, t),
+    facing: render.facing,
+    moving: t < 1 && duration > 1,
+  };
+}
+
+function findNewlyDeadActors(before: SoloGameState, after: SoloGameState): WorldActor[] {
+  const deaths: WorldActor[] = [];
+  for (const actorBefore of before.actors) {
+    if (!actorBefore.alive) continue;
+    const actorAfter = after.actors.find((entry) => entry.id === actorBefore.id);
+    if (actorAfter && !actorAfter.alive) {
+      deaths.push(actorAfter);
+    }
+  }
+  return deaths;
+}
+
+function detectMajorEventCard(
+  before: SoloGameState,
+  after: SoloGameState,
+  outcome: SoloOutcome,
+  actionText: string
+): MajorEventCard | null {
+  const beforeRank = before.player.rank || computeRankFromQuests(before);
+  const afterRank = after.player.rank || computeRankFromQuests(after);
+  const completedQuests = after.quests.filter((quest) => {
+    const previous = before.quests.find((entry) => entry.id === quest.id);
+    return quest.done && !previous?.done;
+  });
+  const beforeTile = before.tiles[before.player.y * before.worldWidth + before.player.x];
+  const afterTile = after.tiles[after.player.y * after.worldWidth + after.player.x];
+  const narrativeBlob = `${outcome.narrative} ${outcome.worldEvent ?? ""} ${actionText}`.toLowerCase();
+
+  if (after.status === "victory" && before.status !== "victory") {
+    return {
+      id: `victory_${after.turn}`,
+      title: "Victoire",
+      body: "Le monde te reconnait enfin comme le heros qui a renverse le Roi Demon.",
+      tone: "victory",
+    };
+  }
+
+  if (/mise a prix|tete est mise a prix|wanted/.test(narrativeBlob)) {
+    return {
+      id: `wanted_${after.turn}`,
+      title: "TA TETE EST MISE A PRIX",
+      body: "Le monde a bascule. Ton nom circule et des chasseurs commencent deja a te chercher.",
+      tone: "danger",
+    };
+  }
+
+  if (completedQuests.length > 0) {
+    return {
+      id: `quest_${completedQuests[0].id}_${after.turn}`,
+      title: "Quete terminee",
+      body: `${completedQuests[0].title} completee. Le monde reagit a ta progression.`,
+      tone: "reward",
+    };
+  }
+
+  if (afterRank !== beforeRank) {
+    return {
+      id: `rank_${afterRank}_${after.turn}`,
+      title: `Rang ${afterRank}`,
+      body: `Ta reputation grimpe. Tu quittes le rang ${beforeRank} pour atteindre le rang ${afterRank}.`,
+      tone: "reward",
+    };
+  }
+
+  if (outcome.worldEvent) {
+    return {
+      id: `world_${after.turn}`,
+      title: "Le monde change",
+      body: outcome.worldEvent,
+      tone: /danger|rituel|roi demon|monstre/.test(outcome.worldEvent.toLowerCase()) ? "danger" : "arcane",
+    };
+  }
+
+  if (after.player.objective !== before.player.objective) {
+    return {
+      id: `objective_${after.turn}`,
+      title: "Nouvel objectif",
+      body: after.player.objective,
+      tone: "arcane",
+    };
+  }
+
+  if ((afterTile?.poi === "dungeon_gate" || afterTile?.terrain === "dungeon") && beforeTile?.terrain !== "dungeon") {
+    return {
+      id: `dungeon_${after.turn}`,
+      title: "Donjon oublie",
+      body: "L air devient lourd, la pierre remplace la terre et chaque pas semble plus dangereux.",
+      tone: "arcane",
+    };
+  }
+
+  if ((afterTile?.poi === "boss_gate" || afterTile?.terrain === "boss") && beforeTile?.terrain !== "boss") {
+    return {
+      id: `boss_${after.turn}`,
+      title: "Citadelle du Roi Demon",
+      body: "Le decor change de ton. Tu entres dans un lieu ou chaque erreur peut devenir fatale.",
+      tone: "danger",
+    };
+  }
+
+  return null;
+}
+
+function deriveObjectiveLens(state: SoloGameState): ObjectiveLens {
+  const guildQuest = state.quests.find((quest) => quest.id === "quest_guild_notice");
+  const dungeonQuest = state.quests.find((quest) => quest.id === "quest_dungeon_core");
+  const bossQuest = state.quests.find((quest) => quest.id === "quest_demon_king");
+  const potionCount = playerItemQty(state, "Potion de soin");
+
+  if (guildQuest && !guildQuest.done) {
+    return {
+      primary: state.player.objective,
+      step: hasPoiNearby(state, "guild", 1) ? "Parler au maitre de guilde et prendre la premiere mission." : "Rejoindre la guilde du village.",
+      suggestion: hasPoiNearby(state, "guild", 1) ? "Ouvre la guilde ou demande une quete." : "Va a la guilde pour lancer ta progression.",
+      targetPoi: "guild",
+    };
+  }
+
+  if (dungeonQuest && !dungeonQuest.done) {
+    if (potionCount <= 0) {
+      return {
+        primary: state.player.objective,
+        step: hasPoiNearby(state, "shop", 1) ? "Faire des provisions avant le donjon." : "Passer a la boutique pour se preparer.",
+        suggestion: hasPoiNearby(state, "shop", 1) ? "Achete au moins une Potion de soin." : "Va a la boutique avant de descendre au donjon.",
+        targetPoi: "shop",
+      };
+    }
+    return {
+      primary: state.player.objective,
+      step: hasPoiNearby(state, "dungeon_gate", 1) ? "Entrer dans le donjon et recuperer la relique." : "Atteindre la porte du donjon.",
+      suggestion: hasPoiNearby(state, "dungeon_gate", 1) ? "Avance dans le donjon et garde tes ressources." : "Traverse le sud et prepare ton entree dans le donjon.",
+      targetPoi: "dungeon_gate",
+    };
+  }
+
+  if (bossQuest && !bossQuest.done) {
+    return {
+      primary: state.player.objective,
+      step: hasPoiNearby(state, "boss_gate", 1) ? "Affronter le Roi Demon." : "Rejoindre la citadelle du Roi Demon.",
+      suggestion: hasPoiNearby(state, "boss_gate", 1) ? "Prepare ton attaque finale." : "Prends la route du sud-est vers la citadelle.",
+      targetPoi: "boss_gate",
+    };
+  }
+
+  return {
+    primary: state.player.objective,
+    step: "Le chapitre principal est boucle. Tu peux explorer ou recommencer une aventure.",
+    suggestion: "Profite du monde, du journal et de ton inventaire avant une nouvelle partie.",
+    targetPoi: null,
+  };
+}
+
+function buildActionSuggestions(state: SoloGameState, objective: ObjectiveLens): string[] {
+  const suggestions: string[] = [];
+  const push = (value: string): void => {
+    if (!suggestions.includes(value)) suggestions.push(value);
+  };
+
+  if (objective.targetPoi && !hasPoiNearby(state, objective.targetPoi, 1)) {
+    push(actionForPoi(objective.targetPoi));
+  }
+
+  if (hasPoiNearby(state, "shop", 1)) {
+    push("j achete Potion de soin");
+    push("je demande les prix du marchand");
+  }
+  if (hasPoiNearby(state, "guild", 1)) {
+    push("je prends la quete");
+    push("je parle au maitre de guilde");
+  }
+  if (hasPoiNearby(state, "inn", 1)) {
+    push("je me repose");
+  }
+  if (hasPoiNearby(state, "dungeon_gate", 1)) {
+    push("je vais au donjon");
+  }
+  if (hasPoiNearby(state, "boss_gate", 1)) {
+    push("j attaque le Roi Demon");
+  }
+
+  const nearbyHostile = nearestVisibleHostile(state, 2);
+  if (nearbyHostile) {
+    push("j attaque le monstre");
+  }
+
+  push("je vais a la boutique");
+  push("je vais a la guilde");
+
+  return suggestions.slice(0, 6);
+}
+
+function actionForPoi(poi: Exclude<PoiType, null>): string {
+  if (poi === "shop") return "je vais a la boutique";
+  if (poi === "guild") return "je vais a la guilde";
+  if (poi === "inn") return "je vais a l auberge";
+  if (poi === "house") return "je vais a la maison la plus proche";
+  if (poi === "dungeon_gate") return "je vais au donjon";
+  if (poi === "boss_gate") return "je vais au boss";
+  return "je vais au camp";
+}
+
+function describeTypedIntent(state: SoloGameState, rawText: string): string {
+  const text = normalizeText(rawText);
+  if (/achete|acheter|buy|commande/.test(text)) return "Le jeu va verifier le stock, puis te faire marcher vers la boutique si necessaire.";
+  if (/guilde|quete|mission|contrat/.test(text)) return "Le jeu prepare une interaction de quete avec la guilde.";
+  if (/attaque|frappe|combat|tue|duel/.test(text)) return "Le jeu cible la menace la plus proche et prepare une resolution de combat.";
+  if (/repos|repose|auberge|dors/.test(text)) return "Le jeu interprete une action de recuperation.";
+  if (/va|vais|aller|rejoins|rejoindre/.test(text)) {
+    return `Le jeu interprete un deplacement depuis ${screenLabel(chunkOf(state.player.x, state.player.y).cx, chunkOf(state.player.x, state.player.y).cy)}.`;
+  }
+  return "Le jeu va interpreter ton intention librement et appliquer le resultat le plus coherent.";
+}
+
+function describeResolvedIntent(rawText: string, outcome: SoloOutcome, next: SoloGameState): string {
+  if (outcome.buyItemName) return `Acheter ${outcome.buyItemName}.`;
+  if (outcome.requestQuest) return "Prendre une mission de guilde.";
+  if (outcome.attackNearestHostile) return "Attaquer l ennemi le plus proche.";
+  if (outcome.destroyTarget) return "Detruire un obstacle proche.";
+  if (outcome.talkToNearestNpc && outcome.npcSpeech) return "Dialoguer avec le PNJ le plus proche.";
+  if (outcome.moveToPoi) return `Se rendre vers ${poiDisplayName(outcome.moveToPoi)}.`;
+  if (outcome.moveBy) return "Se deplacer dans la zone actuelle.";
+  return describeTypedIntent(next, rawText);
+}
+
+function collectChunkPoiMarkers(
+  state: SoloGameState,
+  cx: number,
+  cy: number
+): Array<{ poi: Exclude<PoiType, null>; label: string; x: number; y: number; near: boolean }> {
+  const startX = cx * CHUNK_SIZE;
+  const startY = cy * CHUNK_SIZE;
+  const groups = new Map<Exclude<PoiType, null>, Array<{ x: number; y: number }>>();
+
+  for (let y = startY; y < startY + CHUNK_SIZE; y += 1) {
+    for (let x = startX; x < startX + CHUNK_SIZE; x += 1) {
+      const tile = state.tiles[y * state.worldWidth + x];
+      if (!tile?.poi) continue;
+      const poi = tile.poi;
+      const list = groups.get(poi) ?? [];
+      list.push({ x, y });
+      groups.set(poi, list);
+    }
+  }
+
+  return Array.from(groups.entries())
+    .map(([poi, tiles]) => {
+      const averageX = tiles.reduce((sum, entry) => sum + entry.x, 0) / tiles.length;
+      const averageY = tiles.reduce((sum, entry) => sum + entry.y, 0) / tiles.length;
+      return {
+        poi,
+        label: poi === "house" ? "Maisons" : poiDisplayName(poi),
+        x: averageX,
+        y: averageY,
+        near: hasPoiNearby(state, poi, 1),
+      };
+    })
+    .sort((a, b) => a.y - b.y);
+}
+
+function drawPoiLabel(
+  ctx: CanvasRenderingContext2D,
+  label: string,
+  centerX: number,
+  topY: number,
+  near: boolean,
+  focused: boolean
+): void {
+  ctx.save();
+  ctx.font = `${focused ? 700 : 600} 11px sans-serif`;
+  const width = Math.ceil(ctx.measureText(label).width) + 16;
+  const x = Math.round(centerX - width / 2);
+  const y = Math.round(topY - 18);
+  const toneFill = focused ? "rgba(53, 38, 12, 0.96)" : near ? "rgba(18, 46, 61, 0.92)" : "rgba(14, 22, 38, 0.84)";
+  const toneStroke = focused ? "rgba(255, 214, 118, 0.94)" : near ? "rgba(112, 212, 255, 0.9)" : "rgba(143, 161, 205, 0.62)";
+  ctx.fillStyle = toneFill;
+  ctx.strokeStyle = toneStroke;
+  ctx.lineWidth = focused ? 2 : 1.5;
+  ctx.beginPath();
+  ctx.roundRect(x, y, width, 18, 8);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = focused ? "#ffe6af" : near ? "#d9f2ff" : "#d6e2ff";
+  ctx.textAlign = "center";
+  ctx.fillText(label, Math.round(centerX), y + 13);
+  ctx.restore();
+}
+
+function drawDeathFx(
+  ctx: CanvasRenderingContext2D,
+  entry: DeathFx,
+  startX: number,
+  startY: number,
+  offsetX: number,
+  offsetY: number,
+  now: number
+): void {
+  const progress = clamp((now - entry.startedAt) / 860, 0, 1);
+  if (progress >= 1) return;
+  const px = offsetX + (entry.x - startX) * TILE_PX + TILE_PX / 2;
+  const py = offsetY + (entry.y - startY) * TILE_PX + TILE_PX / 2;
+  const ring = 6 + progress * 22;
+  const alpha = 1 - progress;
+  const color = entry.hostile ? "245, 196, 110" : "179, 215, 255";
+
+  ctx.save();
+  ctx.strokeStyle = `rgba(${color}, ${0.82 * alpha})`;
+  ctx.fillStyle = `rgba(${color}, ${0.22 * alpha})`;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(px, py, ring, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = `rgba(255, 255, 255, ${0.74 * alpha})`;
+  ctx.fillRect(px - 1, py - 10, 2, 20);
+  ctx.fillRect(px - 10, py - 1, 20, 2);
+  ctx.restore();
+}
+
+function playerItemQty(state: SoloGameState, name: string): number {
+  const normalized = normalizeText(name);
+  const found = state.player.inventory.find((entry) => normalizeText(entry.name) === normalized);
+  return found?.qty ?? 0;
+}
+
+function poiDisplayName(poi: Exclude<PoiType, null>): string {
+  if (poi === "shop") return "Boutique";
+  if (poi === "guild") return "Guilde";
+  if (poi === "inn") return "Auberge";
+  if (poi === "house") return "Maison";
+  if (poi === "dungeon_gate") return "Donjon";
+  if (poi === "boss_gate") return "Citadelle";
+  return "Camp";
+}
+
+function describePoiDirection(state: SoloGameState, poi: Exclude<PoiType, null>): string | null {
+  const targets: Array<{ x: number; y: number }> = [];
+  for (let y = 0; y < state.worldHeight; y += 1) {
+    for (let x = 0; x < state.worldWidth; x += 1) {
+      if (state.tiles[y * state.worldWidth + x]?.poi === poi) {
+        targets.push({ x, y });
+      }
+    }
+  }
+  if (targets.length === 0) return null;
+
+  const target = targets.sort(
+    (a, b) => manhattan(a.x, a.y, state.player.x, state.player.y) - manhattan(b.x, b.y, state.player.x, state.player.y)
+  )[0];
+  const dx = target.x - state.player.x;
+  const dy = target.y - state.player.y;
+  if (dx === 0 && dy === 0) return "tu y es deja.";
+
+  const horizontal = dx > 0 ? "est" : dx < 0 ? "ouest" : "";
+  const vertical = dy > 0 ? "sud" : dy < 0 ? "nord" : "";
+  const direction = [vertical, horizontal].filter(Boolean).join("-");
+  const screens = Math.abs(Math.floor(target.x / CHUNK_SIZE) - Math.floor(state.player.x / CHUNK_SIZE)) +
+    Math.abs(Math.floor(target.y / CHUNK_SIZE) - Math.floor(state.player.y / CHUNK_SIZE));
+  if (screens <= 0) return `dans ce chunk, vers le ${direction}.`;
+  return `${screens} zone${screens > 1 ? "s" : ""} plus loin, vers le ${direction}.`;
+}
+
+function parseLogEntry(line: string): { tag: string; body: string; className: string } {
+  const match = line.match(/^([^:]+):\s*(.*)$/);
+  if (!match) {
+    return { tag: "LOG", body: line, className: "logMisc" };
+  }
+  const [, rawTag, body] = match;
+  const tag = rawTag.trim();
+  if (tag === "SYSTEM") return { tag, body, className: "logSystem" };
+  if (tag === "MJ") return { tag, body, className: "logMj" };
+  if (tag === "EVENT") return { tag, body, className: "logEvent" };
+  if (tag === "TOI") return { tag, body, className: "logPlayer" };
+  return { tag, body, className: "logNpc" };
+}
+
 function getActorRenderPose(
   state: SoloGameState,
   actor: WorldActor,
@@ -1238,7 +1896,7 @@ function getActorRenderPose(
       y: actor.y,
       baseX: actor.x,
       baseY: actor.y,
-      facing: allowed[Math.floor(Math.random() * allowed.length)] ?? "down",
+      facing: initialFacing(actor, allowed),
       nextDirectionAt: now + nextDirectionInterval(actor.kind),
       nextMoveAt: now + nextMoveInterval(actor.kind),
     };
@@ -1257,6 +1915,18 @@ function getActorRenderPose(
 
   const allowed = facingOptions(actor);
   const leashRange = patrolRange(actor);
+
+  if (leashRange === 0) {
+    entry.x = actor.x;
+    entry.y = actor.y;
+    entry.moving = undefined;
+    return {
+      x: entry.x,
+      y: entry.y,
+      facing: entry.facing,
+      moving: false,
+    };
+  }
 
   if (paused || (pinnedActorId !== null && actor.id === pinnedActorId)) {
     if (entry.moving) {
@@ -1283,7 +1953,6 @@ function getActorRenderPose(
   }
 
   if (!entry.moving && now >= entry.nextDirectionAt) {
-    entry.facing = pickNextFacing(entry.facing, allowed);
     entry.nextDirectionAt = now + nextDirectionInterval(actor.kind);
   }
 
@@ -1299,6 +1968,7 @@ function getActorRenderPose(
         Math.abs(targetY - entry.baseY) <= leashRange;
       if (!canMove) return false;
       const duration = moveDuration(actor.kind);
+      entry.facing = facing;
       entry.moving = {
         fromX: entry.x,
         fromY: entry.y,
@@ -1312,8 +1982,7 @@ function getActorRenderPose(
 
     let moved = attemptMove(entry.facing);
     if (!moved) {
-      entry.facing = pickNextFacing(entry.facing, allowed);
-      moved = attemptMove(entry.facing);
+      moved = attemptMove(nextWanderFacing(actor, entry.facing, allowed));
     }
 
     if (!moved) {
@@ -1347,7 +2016,35 @@ function facingOptions(actor: WorldActor): Facing[] {
 
 function patrolRange(actor: WorldActor): number {
   if (!actor.patrol) return actor.kind === "animal" ? 2 : 1;
-  return clamp(Math.round(Math.abs(actor.patrol.range || 0.3) * 10), 1, 4);
+  const raw = Math.abs(actor.patrol.range ?? 0.3);
+  if (raw < 0.05) return 0;
+  return clamp(Math.round(raw * 10), 1, 4);
+}
+
+function initialFacing(actor: WorldActor, allowed: Facing[]): Facing {
+  if (allowed.length === 0) return "down";
+  if (allowed.length === 1) return allowed[0];
+  const seed = hashFloat(actor.id);
+  return allowed[Math.floor(seed * allowed.length)] ?? allowed[0];
+}
+
+function nextWanderFacing(actor: WorldActor, current: Facing, allowed: Facing[]): Facing {
+  if (actor.patrol?.axis === "x") {
+    return current === "left" ? "right" : "left";
+  }
+  if (actor.patrol?.axis === "y") {
+    return current === "up" ? "down" : "up";
+  }
+  const opposite = oppositeFacing(current);
+  if (allowed.includes(opposite)) return opposite;
+  return pickNextFacing(current, allowed);
+}
+
+function oppositeFacing(facing: Facing): Facing {
+  if (facing === "up") return "down";
+  if (facing === "down") return "up";
+  if (facing === "left") return "right";
+  return "left";
 }
 
 function pickNextFacing(current: Facing, allowed: Facing[]): Facing {
@@ -1414,7 +2111,10 @@ function drawChunkScene(
   playerRender: PlayerRenderState | null,
   sceneMode: SceneMode,
   paused: boolean,
-  pinnedActorId: string | null
+  pinnedActorId: string | null,
+  trail: TrailEntry[],
+  focusedPoi: Exclude<PoiType, null> | null,
+  deathFx: DeathFx[]
 ): void {
   const startX = cx * CHUNK_SIZE;
   const startY = cy * CHUNK_SIZE;
@@ -1429,6 +2129,9 @@ function drawChunkScene(
   const rock = cache.get(BASE_ASSETS.rock);
   const chest = cache.get(BASE_ASSETS.chest);
   const bubbleIcon = cache.get(BASE_ASSETS.dialogInfo);
+  const playerPose = playerRender
+    ? getPlayerRenderPose(playerRender, now)
+    : { x: state.player.x, y: state.player.y, facing: "down" as Facing, moving: false };
 
   const tiles = tilesForChunk(state, cx, cy);
 
@@ -1484,6 +2187,9 @@ function drawChunkScene(
     } else if (tile.terrain === "desert") {
       ctx.fillStyle = "rgba(220, 136, 49, 0.2)";
       ctx.fillRect(px, py, TILE_PX, TILE_PX);
+    } else if (tile.terrain === "village") {
+      ctx.fillStyle = "rgba(118, 90, 58, 0.08)";
+      ctx.fillRect(px, py, TILE_PX, TILE_PX);
     } else if (tile.terrain === "road") {
       ctx.fillStyle = "rgba(73, 43, 18, 0.2)";
       ctx.fillRect(px + 2, py + 2, TILE_PX - 4, TILE_PX - 4);
@@ -1528,6 +2234,21 @@ function drawChunkScene(
     }
   }
 
+  const activeTrail = trail
+    .filter((entry) => entry.chunkKey === `${cx}_${cy}`)
+    .slice(-20);
+  for (const entry of activeTrail) {
+    const age = Date.now() - entry.startedAt;
+    const fade = clamp(1 - age / 5600, 0.14, 0.58);
+    const px = offsetX + (entry.x - startX) * TILE_PX;
+    const py = offsetY + (entry.y - startY) * TILE_PX;
+    ctx.fillStyle = `rgba(196, 205, 214, ${0.1 * fade})`;
+    ctx.fillRect(px + 4, py + 4, TILE_PX - 8, TILE_PX - 8);
+    ctx.strokeStyle = `rgba(228, 236, 246, ${0.16 * fade})`;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(px + 6, py + 6, TILE_PX - 12, TILE_PX - 12);
+  }
+
   const decors = getDecorsForChunk(cx, cy);
   for (const decor of decors) {
     const px = offsetX + (decor.x - startX) * TILE_PX;
@@ -1539,6 +2260,25 @@ function drawChunkScene(
       nature,
       chest,
     });
+  }
+
+  const poiMarkers = collectChunkPoiMarkers(state, cx, cy);
+  for (const marker of poiMarkers) {
+    const px = offsetX + (marker.x - startX) * TILE_PX;
+    const py = offsetY + (marker.y - startY) * TILE_PX;
+    const isFocused = focusedPoi === marker.poi;
+    if (marker.near || isFocused) {
+      ctx.save();
+      ctx.strokeStyle = isFocused ? "rgba(255, 222, 145, 0.94)" : "rgba(116, 213, 255, 0.7)";
+      ctx.fillStyle = isFocused ? "rgba(255, 210, 108, 0.14)" : "rgba(98, 184, 240, 0.12)";
+      ctx.lineWidth = isFocused ? 2.5 : 2;
+      ctx.beginPath();
+      ctx.roundRect(px + 2, py + 2, TILE_PX - 4, TILE_PX - 4, 7);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+    drawPoiLabel(ctx, marker.label, px + TILE_PX / 2, py - 8, marker.near, isFocused);
   }
 
   const actors = actorsInChunk(state, cx, cy)
@@ -1602,15 +2342,15 @@ function drawChunkScene(
 
   if (playerInChunk) {
     drawables.push({
-      y: state.player.y,
+      y: playerPose.y,
       draw: () => {
         const walk = cache.get(state.player.characterWalk);
         const idle = cache.get(state.player.characterIdle);
-        const localX = offsetX + (state.player.x - startX) * TILE_PX;
+        const localX = offsetX + (playerPose.x - startX) * TILE_PX;
         const idleBob = Math.sin(now * 0.0045) * 1.25;
-        const localY = offsetY + (state.player.y - startY) * TILE_PX + idleBob;
-        const facing = playerRender?.facing ?? "down";
-        const moving = !!playerRender && now < playerRender.movingUntil;
+        const localY = offsetY + (playerPose.y - startY) * TILE_PX + idleBob;
+        const facing = playerPose.facing;
+        const moving = playerPose.moving;
         const row = facing === "down" ? 0 : facing === "up" ? 3 : facing === "left" ? 1 : 2;
         const frame = moving ? Math.floor(now * 0.0065) % 4 : 0;
         const sheet = moving ? walk ?? idle : idle ?? walk;
@@ -1649,6 +2389,11 @@ function drawChunkScene(
 
   drawables.sort((a, b) => a.y - b.y);
   drawables.forEach((entry) => entry.draw());
+
+  const activeDeaths = deathFx.filter((entry) => entry.chunkKey === `${cx}_${cy}`);
+  for (const entry of activeDeaths) {
+    drawDeathFx(ctx, entry, startX, startY, offsetX, offsetY, now);
+  }
 }
 
 function drawBattleScene(
@@ -1724,6 +2469,10 @@ function drawDecor(
   }
   if (kind === "house_b" && assets.house) {
     drawSprite(ctx, assets.house, 64, 0, 64, 64, x, y - Math.floor(TILE_PX * 0.2), w, h + Math.floor(TILE_PX * 0.2));
+    return;
+  }
+  if (kind === "house_c" && assets.house) {
+    drawSprite(ctx, assets.house, 128, 0, 64, 64, x, y - Math.floor(TILE_PX * 0.2), w, h + Math.floor(TILE_PX * 0.2));
     return;
   }
   if (kind === "fence_h" && (assets.house || assets.field)) {
@@ -1873,14 +2622,6 @@ function pickTerrainTile(terrain: string, x: number, y: number, sceneMode: Scene
     return choices[idx] ?? choices[0];
   };
 
-  if (sceneMode === "house") {
-    const [sx, sy] = pick([
-      [0, 0],
-      [16, 0],
-      [32, 0],
-    ]);
-    return { sheet: "floorB", sx, sy, sw: 16, sh: 16 };
-  }
   if (sceneMode === "dungeon" || sceneMode === "boss") {
     const [sx, sy] = pick([
       [0, 16],
@@ -1899,7 +2640,30 @@ function pickTerrainTile(terrain: string, x: number, y: number, sceneMode: Scene
     ]);
     return { sheet: "field", sx, sy, sw: 16, sh: 16 };
   }
-  if (terrain === "desert" || terrain === "village" || terrain === "road" || terrain === "grass") {
+  const inVillageChunk = x >= 16 && x < 32 && y >= 16 && y < 32;
+  if (terrain === "village") {
+    const [sx, sy] = pick([
+      [304, 80],
+      [320, 80],
+      [336, 80],
+      [352, 80],
+      [304, 96],
+      [320, 96],
+    ]);
+    return { sheet: "house", sx, sy, sw: 16, sh: 16 };
+  }
+  if (terrain === "road" && inVillageChunk) {
+    const [sx, sy] = pick([
+      [400, 48],
+      [432, 48],
+      [400, 64],
+      [304, 176],
+      [320, 176],
+      [432, 192],
+    ]);
+    return { sheet: "house", sx, sy, sw: 16, sh: 16 };
+  }
+  if (terrain === "desert" || terrain === "road" || terrain === "grass") {
     const [sx, sy] = pick([
       [0, 0],
       [16, 0],

@@ -107,6 +107,13 @@ const PRESETS: AssetPreset[] = [
     emoji: "fire",
     keywords: ["torche", "torch", "flamme", "feu"],
   },
+  {
+    id: "rope",
+    name: "Corde solide",
+    icon: `${BASE_UI}/Items & Weapon/Hook.png`,
+    emoji: "rope",
+    keywords: ["corde", "rope", "hook", "grappin"],
+  },
 ];
 
 export type ResolvedItemAsset = {

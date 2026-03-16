@@ -70,6 +70,7 @@ POI v1:
 - boucle solo complete jouable
 - deplacements + collisions
 - deplacement vers POI (shop/guild/inn/dungeon/boss)
+- ciblage maison la plus proche si precisee
 - combat de base contre hostiles
 - destruction de props destructibles
 - drops ressources inventaire
@@ -79,10 +80,12 @@ POI v1:
 
 ## 7) Limites actuelles
 - pas de vrai moteur WorldOp/Validator/Policy en runtime
+- etat encore reconstruit a partir d un snapshot client, pas d autorite serveur complete
 - shop encore simple (prix fixe, pas de ownership/politiques)
 - dialogue/fouille pas stateful
 - event log surtout texte (pas replay complet)
 - resolver assets encore partiellement manuel
+- pass visuel map encore incomplet (coherence biomes/sols/decors)
 - promesse "tout est possible" partiellement tenue sur actions complexes
 
 ## 8) Principe d architecture cible (important)
@@ -156,5 +159,5 @@ Definition of done produit:
 - la map, l inventaire, les stats et les objectifs evoluent de facon coherente.
 
 ## 13) Documents a lire ensuite
-- [ENGINE_SPEC.md](/c:/Users/daiki/Desktop/FREEROLL/docs/ENGINE_SPEC.md)
-- [ROADMAP_QA.md](/c:/Users/daiki/Desktop/FREEROLL/docs/ROADMAP_QA.md)
+- [ENGINE_SPEC.md](/c:/Users/Daiki/Desktop/Rollplay/docs/ENGINE_SPEC.md)
+- [ROADMAP_QA.md](/c:/Users/Daiki/Desktop/Rollplay/docs/ROADMAP_QA.md)

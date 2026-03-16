@@ -13,6 +13,7 @@ const ICON_BASE =
 export type SceneDecorKind =
   | "house_a"
   | "house_b"
+  | "house_c"
   | "fence_h"
   | "fence_v"
   | "ruin_a"
@@ -37,13 +38,15 @@ export type SceneDecor = {
 };
 
 const DECORS: SceneDecor[] = [
-  { id: "v_house_a", screenX: 1, screenY: 1, x: 18, y: 18, w: 4, h: 4, kind: "house_a" },
-  { id: "v_house_b", screenX: 1, screenY: 1, x: 24, y: 18, w: 4, h: 4, kind: "house_b" },
-  { id: "v_house_c", screenX: 1, screenY: 1, x: 30, y: 18, w: 4, h: 4, kind: "house_b" },
-  { id: "v_guild_flag", screenX: 1, screenY: 1, x: 18, y: 22, w: 1, h: 1, kind: "guild_flag" },
-  { id: "v_inn_sign", screenX: 1, screenY: 1, x: 21, y: 23, w: 1, h: 1, kind: "inn_sign" },
-  { id: "f_fence_1", screenX: 0, screenY: 1, x: 9, y: 23, w: 4, h: 1, kind: "fence_h" },
-  { id: "f_fence_2", screenX: 0, screenY: 1, x: 6, y: 20, w: 1, h: 4, kind: "fence_v" },
+  { id: "v_house_a", screenX: 1, screenY: 1, x: 17, y: 18, w: 4, h: 4, kind: "house_a" },
+  { id: "v_house_b", screenX: 1, screenY: 1, x: 23, y: 18, w: 4, h: 4, kind: "house_b" },
+  { id: "v_house_c", screenX: 1, screenY: 1, x: 29, y: 18, w: 4, h: 4, kind: "house_c" },
+  { id: "v_guild_flag", screenX: 1, screenY: 1, x: 17, y: 22, w: 1, h: 1, kind: "guild_flag" },
+  { id: "v_inn_sign", screenX: 1, screenY: 1, x: 20, y: 22, w: 1, h: 1, kind: "inn_sign" },
+  { id: "v_shop_stall", screenX: 1, screenY: 1, x: 26, y: 22, w: 2, h: 2, kind: "shop_stall" },
+  { id: "v_well", screenX: 1, screenY: 1, x: 24, y: 27, w: 1, h: 1, kind: "well" },
+  { id: "v_fence_left", screenX: 1, screenY: 1, x: 16, y: 19, w: 1, h: 4, kind: "fence_v" },
+  { id: "v_fence_right", screenX: 1, screenY: 1, x: 33, y: 19, w: 1, h: 4, kind: "fence_v" },
   { id: "d_ruin_1", screenX: 2, screenY: 1, x: 35, y: 19, w: 3, h: 3, kind: "ruin_a" },
   { id: "d_ruin_2", screenX: 2, screenY: 1, x: 40, y: 21, w: 3, h: 3, kind: "ruin_b" },
   { id: "d_palms", screenX: 2, screenY: 1, x: 43, y: 24, w: 2, h: 2, kind: "palm_cluster" },
@@ -339,6 +342,8 @@ function createTiles(): Tile[] {
 
   // Village plaza to break monotony and keep readable POI flow.
   paintRect(tiles, 20, 22, 10, 6, { terrain: "road", blocked: false, destructible: false });
+  paintRect(tiles, 17, 17, 17, 6, { terrain: "village", blocked: false, destructible: false });
+  paintRect(tiles, 21, 25, 7, 4, { terrain: "village", blocked: false, destructible: false });
 
   // Water boundaries.
   for (let x = 0; x < WORLD_WIDTH; x += 1) {
@@ -396,7 +401,7 @@ function createActors(): WorldActor[] {
         "La guilde recrute des aventuriers audacieux.",
         "Si tu veux du rang, prouve ta valeur dans le donjon.",
       ],
-      patrol: { axis: "y", range: 0.28, speed: 0.22, phase: 0.2 },
+      patrol: { axis: "y", range: 0, speed: 0, phase: 0.2 },
     },
     {
       id: "npc_shopkeeper",
@@ -411,14 +416,14 @@ function createActors(): WorldActor[] {
       sprite: `${CHARACTER_BASE}/OldMan2/SeparateAnim/Walk.png`,
       face: `${CHARACTER_BASE}/OldMan2/Faceset.png`,
       dialogue: ["Mes prix changent selon le danger du moment.", "Tu veux acheter ou vendre ?"],
-      patrol: { axis: "x", range: 0.3, speed: 0.24, phase: 0.7 },
+      patrol: { axis: "x", range: 0, speed: 0, phase: 0.7 },
     },
     {
       id: "npc_innkeeper",
       name: "Aubergiste",
       kind: "npc",
       x: 21,
-      y: 25,
+      y: 24,
       hp: 14,
       maxHp: 14,
       hostile: false,
@@ -426,13 +431,13 @@ function createActors(): WorldActor[] {
       sprite: `${CHARACTER_BASE}/OldWoman/SeparateAnim/Walk.png`,
       face: `${CHARACTER_BASE}/OldWoman/Faceset.png`,
       dialogue: ["Un repos ici reduit ton stress.", "Le demon rode pres des ruines du sud-est."],
-      patrol: { axis: "x", range: 0.24, speed: 0.21, phase: 1.1 },
+      patrol: { axis: "x", range: 0, speed: 0, phase: 1.1 },
     },
     {
       id: "npc_villager_square_a",
       name: "Villageois",
       kind: "npc",
-      x: 22,
+      x: 23,
       y: 27,
       hp: 10,
       maxHp: 10,
@@ -441,13 +446,13 @@ function createActors(): WorldActor[] {
       sprite: `${CHARACTER_BASE}/Villager/SeparateAnim/Walk.png`,
       face: `${CHARACTER_BASE}/Villager/Faceset.png`,
       dialogue: ["La place est plus sure depuis l arrivee des aventuriers."],
-      patrol: { axis: "x", range: 0.3, speed: 0.22, phase: 0.35 },
+      patrol: { axis: "x", range: 0.16, speed: 0.18, phase: 0.35 },
     },
     {
       id: "npc_villager_square_b",
       name: "Forgeron",
       kind: "npc",
-      x: 28,
+      x: 27,
       y: 27,
       hp: 12,
       maxHp: 12,
@@ -456,13 +461,13 @@ function createActors(): WorldActor[] {
       sprite: `${CHARACTER_BASE}/Villager2/SeparateAnim/Walk.png`,
       face: `${CHARACTER_BASE}/Villager2/Faceset.png`,
       dialogue: ["Les routes sont ouvertes, mais les dunes restent dangereuses."],
-      patrol: { axis: "y", range: 0.28, speed: 0.22, phase: 0.55 },
+      patrol: { axis: "y", range: 0.16, speed: 0.18, phase: 0.55 },
     },
     {
       id: "animal_cat_village",
       name: "Chat",
       kind: "animal",
-      x: 23,
+      x: 25,
       y: 27,
       hp: 6,
       maxHp: 6,
@@ -471,14 +476,14 @@ function createActors(): WorldActor[] {
       sprite: `${ANIMAL_BASE}/Cat/SpriteSheet.png`,
       face: `${ANIMAL_BASE}/Cat/Faceset.png`,
       dialogue: ["Miaou."],
-      patrol: { axis: "x", range: 0.32, speed: 0.29, phase: 0.4 },
+      patrol: { axis: "x", range: 0.2, speed: 0.22, phase: 0.4 },
     },
     {
       id: "animal_dog_forest",
       name: "Chien",
       kind: "animal",
-      x: 11,
-      y: 24,
+      x: 10,
+      y: 21,
       hp: 6,
       maxHp: 6,
       hostile: false,
@@ -492,8 +497,8 @@ function createActors(): WorldActor[] {
       id: "animal_chicken_desert",
       name: "Poulet perdu",
       kind: "animal",
-      x: 38,
-      y: 24,
+      x: 39,
+      y: 21,
       hp: 5,
       maxHp: 5,
       hostile: false,
@@ -679,7 +684,7 @@ function addDesertZoneProps(tiles: Tile[]): void {
     [44, 25],
     [35, 29],
     [39, 30],
-    [45, 33],
+    [45, 31],
   ];
   desertPalms.forEach(([x, y]) => placeProp(tiles, x, y, "palm", false));
 
@@ -717,7 +722,16 @@ function addDungeonZoneProps(tiles: Tile[]): void {
 }
 
 function applyDecorCollisionFootprints(tiles: Tile[]): void {
-  const solidKinds = new Set<SceneDecorKind>(["house_a", "house_b", "ruin_a", "ruin_b", "fence_h", "fence_v"]);
+  const solidKinds = new Set<SceneDecorKind>([
+    "house_a",
+    "house_b",
+    "house_c",
+    "ruin_a",
+    "ruin_b",
+    "fence_h",
+    "fence_v",
+    "well",
+  ]);
   for (const decor of DECORS) {
     if (!solidKinds.has(decor.kind)) continue;
     blockRect(tiles, decor.x, decor.y, decor.w, decor.h);
