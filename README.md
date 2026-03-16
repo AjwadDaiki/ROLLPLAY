@@ -1,36 +1,38 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# FREEROLL - Oracle20
 
-## Getting Started
+RPG solo top-down pilote par IA (action libre + D20).
 
-First, run the development server:
-
+## Demarrage
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
+Ouvrir `http://localhost:3000`.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Etat produit (v1)
+- mode solo jouable
+- scenario Isekai actif
+- map monde `48x48` (chunk visible `16x16`)
+- API MJ: `POST /api/solo/resolve`
+- fallback local si pas de cle LLM
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Variables d environnement
+Voir [`.env.example`](/c:/Users/daiki/Desktop/FREEROLL/.env.example).
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Documentation canonique
+- [PROJECT_GUIDE.md](/c:/Users/daiki/Desktop/FREEROLL/docs/PROJECT_GUIDE.md)  
+  vue produit + gameplay + regles
+- [ENGINE_SPEC.md](/c:/Users/daiki/Desktop/FREEROLL/docs/ENGINE_SPEC.md)  
+  architecture technique, types, protocoles, moteur cible
+- [ROADMAP_QA.md](/c:/Users/daiki/Desktop/FREEROLL/docs/ROADMAP_QA.md)  
+  phases implementation, couverture actions, checklist QA
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Arborescence code utile
+- `app/page.tsx` menu
+- `app/solo/page.tsx` setup
+- `app/game/GameClient.tsx` runtime client
+- `app/api/solo/resolve/route.ts` endpoint MJ
+- `lib/solo/types.ts` modeles
+- `lib/solo/world.ts` generation monde
+- `lib/solo/logic.ts` application outcome
+- `lib/solo/resolve.ts` orchestration IA

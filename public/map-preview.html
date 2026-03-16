@@ -1,0 +1,471 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Oracle20 - Map Preview</title>
+  <style>
+    :root {
+      --tile: 32;
+      --screen-tiles: 20;
+      --screen-px: calc(var(--tile) * var(--screen-tiles));
+      --bg: #101726;
+      --panel: #1a2236;
+      --line: #2d3a58;
+      --txt: #e8eefc;
+      --gold: #f2c66d;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: radial-gradient(circle at 20% 20%, #21304e, transparent 35%),
+        radial-gradient(circle at 80% 0%, #4f3f22, transparent 30%),
+        var(--bg);
+      color: var(--txt);
+      font-family: Arial, sans-serif;
+      display: grid;
+      place-items: center;
+      padding: 16px;
+    }
+
+    .app {
+      width: min(980px, 96vw);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(16, 22, 36, 0.95);
+      padding: 14px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .top {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .title {
+      font-weight: 700;
+      color: var(--gold);
+    }
+
+    .controls {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    button {
+      border: 1px solid #58698f;
+      background: #24304c;
+      color: #eef3ff;
+      border-radius: 8px;
+      padding: 8px 12px;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
+
+    .tag {
+      border: 1px solid #58698f;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 13px;
+      background: #1d2841;
+      min-width: 92px;
+      text-align: center;
+    }
+
+    .viewport {
+      width: var(--screen-px);
+      height: var(--screen-px);
+      overflow: hidden;
+      border: 2px solid #5f7097;
+      border-radius: 10px;
+      margin-inline: auto;
+      image-rendering: pixelated;
+      background: #0b1221;
+    }
+
+    canvas {
+      width: var(--screen-px);
+      height: var(--screen-px);
+      display: block;
+      image-rendering: pixelated;
+    }
+
+    .legend {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      font-size: 13px;
+      color: #b9c7e7;
+    }
+
+    .legend span {
+      border: 1px solid #4f6189;
+      border-radius: 999px;
+      padding: 5px 10px;
+      background: #1c2740;
+    }
+
+    .hint {
+      font-size: 12px;
+      color: #93a6cf;
+    }
+
+    .error {
+      color: #ffb4b4;
+      font-size: 13px;
+      min-height: 18px;
+    }
+
+    @media (max-width: 760px) {
+      :root {
+        --tile: 24;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <section class="top">
+      <div class="title">ORACLE20 - Map Preview 3 ecrans (Foret / Village / Desert)</div>
+      <div class="controls">
+        <button id="leftBtn">Ecran gauche</button>
+        <span id="screenTag" class="tag">Village</span>
+        <button id="rightBtn">Ecran droite</button>
+      </div>
+    </section>
+
+    <section class="viewport">
+      <canvas id="screen" width="640" height="640"></canvas>
+    </section>
+
+    <section class="legend">
+      <span>Gauche: Foret (ressources)</span>
+      <span>Centre: Village (hub)</span>
+      <span>Droite: Desert (ruines)</span>
+    </section>
+
+    <div class="hint">Touches clavier: fleche gauche / fleche droite</div>
+    <div id="error" class="error"></div>
+  </main>
+
+  <script>
+    (() => {
+      const TILE = 32;
+      const GRID = 20;
+      const SCREEN_PX = TILE * GRID;
+      const SCREEN_NAMES = ["Foret", "Village", "Desert"];
+
+      const canvas = document.getElementById("screen");
+      const ctx = canvas.getContext("2d");
+      ctx.imageSmoothingEnabled = false;
+
+      const tag = document.getElementById("screenTag");
+      const leftBtn = document.getElementById("leftBtn");
+      const rightBtn = document.getElementById("rightBtn");
+      const errorNode = document.getElementById("error");
+
+      let activeScreen = 1;
+      let assets = null;
+      let backgroundLayers = [];
+      let raf = null;
+
+      const ASSET_PATHS = {
+        field: "/assets/Ninja Adventure - Asset Pack/Ninja Adventure - Asset Pack/Backgrounds/Tilesets/TilesetField.png",
+        nature: "/assets/Ninja Adventure - Asset Pack/Ninja Adventure - Asset Pack/Backgrounds/Tilesets/TilesetNature.png",
+        house: "/assets/Ninja Adventure - Asset Pack/Ninja Adventure - Asset Pack/Backgrounds/Tilesets/TilesetHouse.png",
+        desertTiles: "/assets/Ninja Adventure - Asset Pack/Ninja Adventure - Asset Pack/Backgrounds/Tilesets/TilesetDesert.png",
+        playerIdle: "/assets/Ninja Adventure - Asset Pack/Ninja Adventure - Asset Pack/Actor/Characters/Boy/SeparateAnim/Idle.png",
+        villagerWalk: "/assets/Ninja Adventure - Asset Pack/Ninja Adventure - Asset Pack/Actor/Characters/Villager/SeparateAnim/Walk.png",
+        monkWalk: "/assets/Ninja Adventure - Asset Pack/Ninja Adventure - Asset Pack/Actor/Characters/Monk/SeparateAnim/Walk.png",
+        pigWalk: "/assets/Ninja Adventure - Asset Pack/Ninja Adventure - Asset Pack/Actor/Characters/GreenPig/SeparateAnim/Walk.png",
+        cat: "/assets/Ninja Adventure - Asset Pack/Ninja Adventure - Asset Pack/Actor/Animals/Cat/SpriteSheet.png",
+        dog: "/assets/Ninja Adventure - Asset Pack/Ninja Adventure - Asset Pack/Actor/Animals/Dog/SpriteSheet.png",
+        chicken: "/assets/Ninja Adventure - Asset Pack/Ninja Adventure - Asset Pack/Actor/Animals/Chicken/SpriteSheetWhite.png",
+        rock: "/assets/Ninja Adventure - Asset Pack/Ninja Adventure - Asset Pack/Items/Resource/Rock.png",
+        branch: "/assets/Ninja Adventure - Asset Pack/Ninja Adventure - Asset Pack/Items/Resource/Branch.png",
+        chest: "/assets/Ninja Adventure - Asset Pack/Ninja Adventure - Asset Pack/Items/Treasure/LittleTreasureChest.png"
+      };
+
+      const ACTORS = [
+        { id: "foxdog", screen: 0, kind: "animal", asset: "dog", axis: "x", x: 8.2, y: 10.7, range: 0.7, speed: 1.4, phase: 0.2 },
+        { id: "forestcat", screen: 0, kind: "animal", asset: "cat", axis: "y", x: 12.8, y: 11.2, range: 0.5, speed: 1.1, phase: 1.8 },
+        { id: "villagerA", screen: 1, kind: "walker", asset: "villagerWalk", axis: "x", x: 7.4, y: 11.3, range: 0.9, speed: 0.9, phase: 0.6 },
+        { id: "villagerB", screen: 1, kind: "walker", asset: "monkWalk", axis: "y", x: 12.9, y: 10.7, range: 0.65, speed: 0.8, phase: 2.2 },
+        { id: "chicken", screen: 1, kind: "animal", asset: "chicken", axis: "x", x: 14.4, y: 12.1, range: 0.5, speed: 1.6, phase: 2.9 },
+        { id: "desertPig", screen: 2, kind: "walker", asset: "pigWalk", axis: "x", x: 9.3, y: 11.2, range: 0.75, speed: 1.0, phase: 0.9 },
+        { id: "desertDog", screen: 2, kind: "animal", asset: "dog", axis: "y", x: 15.1, y: 11.8, range: 0.6, speed: 1.3, phase: 2.4 }
+      ];
+
+      const player = {
+        x: 10,
+        y: 12
+      };
+
+      function encodeAssetUrl(path) {
+        return encodeURI(path).replace(/#/g, "%23");
+      }
+
+      function loadImage(path) {
+        return new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = () => reject(new Error("asset load failed: " + path));
+          img.src = encodeAssetUrl(path);
+        });
+      }
+
+      function makeLayer() {
+        const layer = document.createElement("canvas");
+        layer.width = SCREEN_PX;
+        layer.height = SCREEN_PX;
+        return layer;
+      }
+
+      function drawSprite(target, img, sx, sy, sw, sh, dx, dy, dw, dh, flipX = false) {
+        if (!flipX) {
+          target.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
+          return;
+        }
+        target.save();
+        target.translate(dx + dw, dy);
+        target.scale(-1, 1);
+        target.drawImage(img, sx, sy, sw, sh, 0, 0, dw, dh);
+        target.restore();
+      }
+
+      function drawTile(target, img, sx, sy, x, y) {
+        drawSprite(target, img, sx, sy, 16, 16, x * TILE, y * TILE, TILE, TILE);
+      }
+
+      function fillGroundVar(target, img, picks) {
+        for (let y = 0; y < GRID; y++) {
+          for (let x = 0; x < GRID; x++) {
+            const pick = picks[(x * 11 + y * 7 + x * y) % picks.length];
+            drawTile(target, img, pick[0], pick[1], x, y);
+          }
+        }
+      }
+
+      function drawRoadBand(target, img) {
+        for (let y = 9; y <= 10; y++) {
+          for (let x = 0; x < GRID; x++) {
+            const tile = x % 3 === 0 ? [0, 0] : [16, 0];
+            drawTile(target, img, tile[0], tile[1], x, y);
+          }
+        }
+      }
+
+      function paintForest(layer, loaded) {
+        const target = layer.getContext("2d");
+        target.imageSmoothingEnabled = false;
+
+        fillGroundVar(target, loaded.field, [
+          [16, 32],
+          [32, 32],
+          [16, 64],
+          [32, 64]
+        ]);
+        drawRoadBand(target, loaded.field);
+
+        const treeSet = [
+          [0, 0],
+          [32, 0],
+          [0, 32]
+        ];
+
+        for (let x = 0; x < GRID; x += 2) {
+          const topPick = treeSet[(x / 2) % treeSet.length];
+          const botPick = treeSet[(x / 2 + 1) % treeSet.length];
+          drawSprite(target, loaded.nature, topPick[0], topPick[1], 32, 32, x * TILE, 0, TILE * 2, TILE * 2);
+          drawSprite(target, loaded.nature, botPick[0], botPick[1], 32, 32, x * TILE, (GRID - 2) * TILE, TILE * 2, TILE * 2);
+        }
+
+        drawSprite(target, loaded.nature, 96, 0, 32, 32, 2 * TILE, 4 * TILE, TILE * 2, TILE * 2);
+        drawSprite(target, loaded.nature, 64, 32, 32, 32, 15 * TILE, 4 * TILE, TILE * 2, TILE * 2);
+        drawSprite(target, loaded.nature, 224, 160, 32, 32, 5 * TILE, 13 * TILE, TILE * 2, TILE * 2);
+
+        drawSprite(target, loaded.rock, 0, 0, loaded.rock.width, loaded.rock.height, 9 * TILE + 5, 12 * TILE + 6, TILE - 6, TILE - 6);
+        drawSprite(target, loaded.branch, 0, 0, loaded.branch.width, loaded.branch.height, 12 * TILE + 7, 12 * TILE + 7, TILE - 8, TILE - 8);
+      }
+
+      function paintVillage(layer, loaded) {
+        const target = layer.getContext("2d");
+        target.imageSmoothingEnabled = false;
+
+        fillGroundVar(target, loaded.field, [
+          [16, 0],
+          [32, 0],
+          [0, 0]
+        ]);
+        drawRoadBand(target, loaded.field);
+
+        for (let x = 0; x < GRID; x += 4) {
+          drawTile(target, loaded.field, 16, 32, x, 8);
+          drawTile(target, loaded.field, 32, 32, x + 1, 8);
+        }
+
+        drawSprite(target, loaded.house, 0, 0, 64, 64, 1 * TILE, 1 * TILE, TILE * 4, TILE * 4);
+        drawSprite(target, loaded.house, 64, 0, 64, 64, 7 * TILE, 1 * TILE, TILE * 4, TILE * 4);
+        drawSprite(target, loaded.house, 128, 0, 64, 64, 13 * TILE, 1 * TILE, TILE * 4, TILE * 4);
+
+        for (let x = 2; x < GRID - 2; x += 2) {
+          drawTile(target, loaded.house, 128, 64, x, 6);
+        }
+
+        drawSprite(target, loaded.chest, 0, 0, loaded.chest.width, loaded.chest.height, 10 * TILE + 4, 12 * TILE + 5, TILE, TILE);
+        drawSprite(target, loaded.branch, 0, 0, loaded.branch.width, loaded.branch.height, 6 * TILE + 7, 12 * TILE + 8, TILE - 8, TILE - 8);
+      }
+
+      function paintDesert(layer, loaded) {
+        const target = layer.getContext("2d");
+        target.imageSmoothingEnabled = false;
+
+        fillGroundVar(target, loaded.field, [
+          [16, 0],
+          [32, 0],
+          [0, 0]
+        ]);
+        target.fillStyle = "rgba(220, 136, 49, 0.26)";
+        target.fillRect(0, 0, SCREEN_PX, SCREEN_PX);
+        drawRoadBand(target, loaded.field);
+
+        drawSprite(target, loaded.desertTiles, 0, 0, 48, 64, 1 * TILE, 2 * TILE, TILE * 3, TILE * 4);
+        drawSprite(target, loaded.desertTiles, 48, 64, 48, 64, 5 * TILE, 2 * TILE, TILE * 3, TILE * 4);
+        drawSprite(target, loaded.desertTiles, 160, 64, 64, 96, 10 * TILE, 2 * TILE, TILE * 4, TILE * 6);
+        drawSprite(target, loaded.desertTiles, 224, 96, 64, 80, 15 * TILE, 3 * TILE, TILE * 4, TILE * 5);
+
+        drawSprite(target, loaded.rock, 0, 0, loaded.rock.width, loaded.rock.height, 7 * TILE + 6, 13 * TILE + 6, TILE - 7, TILE - 7);
+        drawSprite(target, loaded.branch, 0, 0, loaded.branch.width, loaded.branch.height, 12 * TILE + 7, 13 * TILE + 8, TILE - 8, TILE - 8);
+        drawSprite(target, loaded.chest, 0, 0, loaded.chest.width, loaded.chest.height, 16 * TILE + 3, 11 * TILE + 3, TILE, TILE);
+      }
+
+      function drawShadow(x, y, width = 16, alpha = 0.35) {
+        ctx.fillStyle = `rgba(0, 0, 0, ${alpha})`;
+        ctx.beginPath();
+        ctx.ellipse(x, y, width, width * 0.45, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      function getActorPose(actor, timeSec) {
+        const wave = Math.sin(timeSec * actor.speed + actor.phase);
+        const dir = Math.cos(timeSec * actor.speed + actor.phase) >= 0 ? 1 : -1;
+        const x = actor.x + (actor.axis === "x" ? wave * actor.range : 0);
+        const y = actor.y + (actor.axis === "y" ? wave * actor.range : 0);
+        return { x, y, dir };
+      }
+
+      function drawWalker(actor, timeSec) {
+        const img = assets[actor.asset];
+        const pose = getActorPose(actor, timeSec);
+        const frame = Math.floor(timeSec * 6 + actor.phase * 3) % 4;
+        const row = actor.axis === "x" ? (pose.dir > 0 ? 2 : 1) : (pose.dir > 0 ? 0 : 3);
+        const px = Math.round(pose.x * TILE);
+        const py = Math.round(pose.y * TILE);
+
+        drawShadow(px + TILE / 2, py + TILE - 4, 10, 0.3);
+        drawSprite(ctx, img, frame * 16, row * 16, 16, 16, px, py, TILE, TILE);
+      }
+
+      function drawAnimal(actor, timeSec) {
+        const img = assets[actor.asset];
+        const pose = getActorPose(actor, timeSec);
+        const frame = Math.floor(timeSec * 5 + actor.phase * 2) % 2;
+        const px = Math.round(pose.x * TILE) + 2;
+        const py = Math.round(pose.y * TILE) + 6;
+        const flip = actor.axis === "x" && pose.dir < 0;
+
+        drawShadow(px + TILE / 2 - 2, py + TILE - 8, 8, 0.28);
+        drawSprite(ctx, img, frame * 16, 0, 16, 16, px, py, TILE - 4, TILE - 4, flip);
+      }
+
+      function drawPlayer(timeSec) {
+        const frame = Math.floor(timeSec * 4) % 4;
+        const bob = Math.sin(timeSec * 4.5) * 1.8;
+        const px = player.x * TILE;
+        const py = player.y * TILE + bob;
+
+        drawShadow(px + TILE / 2, py + TILE - 4, 11, 0.38);
+        drawSprite(ctx, assets.playerIdle, frame * 16, 0, 16, 16, px, py, TILE, TILE);
+      }
+
+      function rebuildBackgrounds() {
+        backgroundLayers = [makeLayer(), makeLayer(), makeLayer()];
+        paintForest(backgroundLayers[0], assets);
+        paintVillage(backgroundLayers[1], assets);
+        paintDesert(backgroundLayers[2], assets);
+      }
+
+      function renderFrame(timeMs) {
+        const t = timeMs * 0.001;
+        ctx.clearRect(0, 0, SCREEN_PX, SCREEN_PX);
+        ctx.drawImage(backgroundLayers[activeScreen], 0, 0);
+
+        const visibleActors = ACTORS
+          .filter((actor) => actor.screen === activeScreen)
+          .map((actor) => ({ actor, pose: getActorPose(actor, t) }))
+          .sort((a, b) => a.pose.y - b.pose.y);
+
+        for (const entry of visibleActors) {
+          if (entry.actor.kind === "walker") drawWalker(entry.actor, t);
+          else drawAnimal(entry.actor, t);
+        }
+
+        drawPlayer(t);
+      }
+
+      function loop(now) {
+        if (!assets || backgroundLayers.length === 0) return;
+        renderFrame(now);
+        raf = requestAnimationFrame(loop);
+      }
+
+      function setScreen(index) {
+        activeScreen = Math.max(0, Math.min(2, index));
+        tag.textContent = SCREEN_NAMES[activeScreen];
+        leftBtn.disabled = activeScreen === 0;
+        rightBtn.disabled = activeScreen === 2;
+      }
+
+      async function init() {
+        try {
+          const entries = await Promise.all(
+            Object.entries(ASSET_PATHS).map(async ([key, path]) => [key, await loadImage(path)])
+          );
+          assets = Object.fromEntries(entries);
+          rebuildBackgrounds();
+          setScreen(1);
+
+          leftBtn.addEventListener("click", () => setScreen(activeScreen - 1));
+          rightBtn.addEventListener("click", () => setScreen(activeScreen + 1));
+
+          window.addEventListener("keydown", (event) => {
+            if (event.key === "ArrowLeft") setScreen(activeScreen - 1);
+            if (event.key === "ArrowRight") setScreen(activeScreen + 1);
+          });
+
+          if (raf) cancelAnimationFrame(raf);
+          raf = requestAnimationFrame(loop);
+        } catch (err) {
+          errorNode.textContent = "Erreur de chargement assets: " + (err && err.message ? err.message : String(err));
+        }
+      }
+
+      init();
+    })();
+  </script>
+</body>
+</html>

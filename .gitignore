@@ -28,8 +28,12 @@ yarn-error.log*
 # local env files
 .env*.local
 
-# vercel
+# deployment
 .vercel
+/backup/
+
+# freeroll-app temp dir
+/freeroll-app/
 
 # typescript
 *.tsbuildinfo
