@@ -10,9 +10,20 @@ import type {
   Tile,
   WorldActor,
 } from "./types";
-import { chunkKey, chunkOf, getTile, idxOf, inBounds, poiLabel, terrainLabel } from "./world";
+import {
+  chunkKey,
+  chunkOf,
+  enforceWorldCoherence,
+  getTile,
+  idxOf,
+  inBounds,
+  poiLabel,
+  terrainLabel,
+} from "./world";
 
 const MAX_STRESS = 100;
+const MAX_MOVE_TILES_PER_TURN = 10;
+const MAX_POI_PATH_STEPS = 12;
 
 export function buildActionContext(state: SoloGameState): SoloActionContext {
   const playerTile = getTile(state, state.player.x, state.player.y);
@@ -128,16 +139,16 @@ export function applyOutcome(prev: SoloGameState, outcome: SoloOutcome): SoloGam
   }
 
   if (outcome.moveToPoi) {
-    moveTowardPoi(next, outcome.moveToPoi, clamp(Math.round(outcome.moveToPoiSteps ?? 6), 1, 24));
+    moveTowardPoi(next, outcome.moveToPoi, clamp(Math.round(outcome.moveToPoiSteps ?? 4), 1, MAX_POI_PATH_STEPS));
   }
 
   if (outcome.approachNearestHostile) {
     const steps =
       typeof outcome.moveToPoiSteps === "number"
-        ? clamp(Math.round(outcome.moveToPoiSteps), 1, 24)
+        ? clamp(Math.round(outcome.moveToPoiSteps), 1, MAX_POI_PATH_STEPS)
         : typeof outcome.diceRoll === "number" && outcome.diceRoll >= 15
-          ? 16
-          : 12;
+          ? 8
+          : 6;
     approachNearestHostile(next, steps);
   }
 
@@ -211,6 +222,7 @@ export function applyOutcome(prev: SoloGameState, outcome: SoloOutcome): SoloGam
     });
   }
 
+  enforceWorldCoherence(next);
   revealPlayerChunk(next);
   checkTileTriggers(next);
   checkLifeAndRespawn(next);
@@ -237,8 +249,8 @@ export function applyOutcome(prev: SoloGameState, outcome: SoloOutcome): SoloGam
 }
 
 function applyMovement(state: SoloGameState, rawDx: number, rawDy: number): void {
-  const dx = clamp(Math.round(rawDx), -16, 16);
-  const dy = clamp(Math.round(rawDy), -16, 16);
+  const dx = clamp(Math.round(rawDx), -MAX_MOVE_TILES_PER_TURN, MAX_MOVE_TILES_PER_TURN);
+  const dy = clamp(Math.round(rawDy), -MAX_MOVE_TILES_PER_TURN, MAX_MOVE_TILES_PER_TURN);
   if (dx === 0 && dy === 0) return;
 
   const stepX = Math.sign(dx);
@@ -323,7 +335,7 @@ function applyAttack(state: SoloGameState, rawPower: number, roll: number | null
   }
   if (targetIndex < 0) {
     const approachSteps =
-      typeof roll === "number" ? (roll >= 15 ? 14 : roll >= 11 ? 10 : roll >= 6 ? 8 : 6) : 12;
+      typeof roll === "number" ? (roll >= 15 ? 8 : roll >= 11 ? 6 : roll >= 6 ? 5 : 4) : 6;
     if (approachNearestHostile(state, approachSteps)) {
       appendLog(state, "SYSTEM: Tu te rapproches de la cible hostile.");
       targetIndex = nearestHostileIndex(state, 2);

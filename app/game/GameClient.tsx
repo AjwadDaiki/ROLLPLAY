@@ -12,10 +12,13 @@ import {
   actorsInChunk,
   chunkOf,
   createInitialSoloState,
+  enforceWorldCoherence,
   getDecorsForChunk,
+  getPoiAnchor,
   screenLabel,
   tilesForChunk,
   UI_ASSETS,
+  WORLD_LAYOUT_VERSION,
 } from "@/lib/solo/world";
 import styles from "./GameClient.module.css";
 
@@ -181,7 +184,7 @@ export default function GameClient() {
   const runId = (params.get("run") || "default").slice(0, 32);
 
   const saveKey = useMemo(
-    () => `freeroll_solo_save_v8_${slugify(playerName)}_${slugify(runId)}`,
+    () => `freeroll_solo_save_${WORLD_LAYOUT_VERSION}_${slugify(playerName)}_${slugify(runId)}`,
     [playerName, runId]
   );
 
@@ -335,14 +338,15 @@ export default function GameClient() {
     }
 
     const movedTiles = Math.abs(dx) + Math.abs(dy);
-    const animateMove = movedTiles > 0 && movedTiles <= 2;
+    const animateMove = movedTiles > 0 && movedTiles <= 20;
+    const moveDuration = animateMove ? clamp(130 + movedTiles * 56, 180, 1050) : 0;
     playerRenderRef.current = {
       x: state.player.x,
       y: state.player.y,
       fromX: animateMove ? prev.x : state.player.x,
       fromY: animateMove ? prev.y : state.player.y,
       moveStartAt: now,
-      moveEndAt: animateMove ? now + 240 + movedTiles * 85 : now,
+      moveEndAt: animateMove ? now + moveDuration : now,
       facing,
     };
   }, [state]);
@@ -1483,10 +1487,12 @@ function manhattan(ax: number, ay: number, bx: number, by: number): number {
 
 function getPlayerRenderPose(
   render: PlayerRenderState | null,
-  now: number
+  now: number,
+  fallbackX: number,
+  fallbackY: number
 ): { x: number; y: number; facing: Facing; moving: boolean } {
   if (!render) {
-    return { x: 0, y: 0, facing: "down", moving: false };
+    return { x: fallbackX, y: fallbackY, facing: "down", moving: false };
   }
   const duration = Math.max(1, render.moveEndAt - render.moveStartAt);
   const t = clamp((now - render.moveStartAt) / duration, 0, 1);
@@ -1744,17 +1750,26 @@ function collectChunkPoiMarkers(
 
   return Array.from(groups.entries())
     .map(([poi, tiles]) => {
+      const anchored = resolvePoiAnchor(cx, cy, poi);
       const averageX = tiles.reduce((sum, entry) => sum + entry.x, 0) / tiles.length;
       const averageY = tiles.reduce((sum, entry) => sum + entry.y, 0) / tiles.length;
       return {
         poi,
         label: poi === "house" ? "Maisons" : poiDisplayName(poi),
-        x: averageX,
-        y: averageY,
+        x: anchored?.x ?? averageX,
+        y: anchored?.y ?? averageY,
         near: hasPoiNearby(state, poi, 1),
       };
     })
     .sort((a, b) => a.y - b.y);
+}
+
+function resolvePoiAnchor(
+  cx: number,
+  cy: number,
+  poi: Exclude<PoiType, null>
+): { x: number; y: number } | null {
+  return getPoiAnchor(cx, cy, poi);
 }
 
 function drawPoiLabel(
@@ -2009,8 +2024,11 @@ function isBlocked(state: SoloGameState, x: number, y: number): boolean {
 }
 
 function facingOptions(actor: WorldActor): Facing[] {
-  if (actor.patrol?.axis === "x") return ["left", "right"];
-  if (actor.patrol?.axis === "y") return ["up", "down"];
+  // All actors can face any direction for natural wandering
+  // The patrol axis only influences preference, not restriction
+  if (actor.kind === "animal") return ["up", "right", "down", "left"];
+  if (actor.kind === "monster" || actor.kind === "boss") return ["up", "right", "down", "left"];
+  // NPCs: allow all directions but still start with axis preference
   return ["up", "right", "down", "left"];
 }
 
@@ -2029,22 +2047,17 @@ function initialFacing(actor: WorldActor, allowed: Facing[]): Facing {
 }
 
 function nextWanderFacing(actor: WorldActor, current: Facing, allowed: Facing[]): Facing {
-  if (actor.patrol?.axis === "x") {
-    return current === "left" ? "right" : "left";
+  // Natural wandering: 50% chance to pick axis-preferred direction, 50% random
+  if (Math.random() < 0.5 && actor.patrol?.axis) {
+    if (actor.patrol.axis === "x") {
+      return current === "left" ? "right" : "left";
+    }
+    if (actor.patrol.axis === "y") {
+      return current === "up" ? "down" : "up";
+    }
   }
-  if (actor.patrol?.axis === "y") {
-    return current === "up" ? "down" : "up";
-  }
-  const opposite = oppositeFacing(current);
-  if (allowed.includes(opposite)) return opposite;
+  // Otherwise pick a random allowed direction (different from current)
   return pickNextFacing(current, allowed);
-}
-
-function oppositeFacing(facing: Facing): Facing {
-  if (facing === "up") return "down";
-  if (facing === "down") return "up";
-  if (facing === "left") return "right";
-  return "left";
 }
 
 function pickNextFacing(current: Facing, allowed: Facing[]): Facing {
@@ -2067,21 +2080,21 @@ function randomBetween(min: number, max: number): number {
 }
 
 function nextDirectionInterval(kind: WorldActor["kind"]): number {
-  if (kind === "animal") return randomBetween(2200, 6400);
-  if (kind === "monster" || kind === "boss") return randomBetween(2600, 7600);
-  return randomBetween(2800, 8400);
+  if (kind === "animal") return randomBetween(1200, 3200);
+  if (kind === "monster" || kind === "boss") return randomBetween(1600, 4000);
+  return randomBetween(1800, 4200);
 }
 
 function nextMoveInterval(kind: WorldActor["kind"]): number {
-  if (kind === "animal") return randomBetween(5200, 8200);
-  if (kind === "monster" || kind === "boss") return randomBetween(5800, 9000);
-  return randomBetween(6200, 9600);
+  if (kind === "animal") return randomBetween(1800, 3600);
+  if (kind === "monster" || kind === "boss") return randomBetween(2200, 4200);
+  return randomBetween(2600, 4800);
 }
 
 function moveDuration(kind: WorldActor["kind"]): number {
-  if (kind === "animal") return randomBetween(780, 1120);
-  if (kind === "monster" || kind === "boss") return randomBetween(860, 1220);
-  return randomBetween(920, 1280);
+  if (kind === "animal") return randomBetween(600, 900);
+  if (kind === "monster" || kind === "boss") return randomBetween(700, 1000);
+  return randomBetween(750, 1050);
 }
 
 function hashFloat(value: string): number {
@@ -2130,7 +2143,7 @@ function drawChunkScene(
   const chest = cache.get(BASE_ASSETS.chest);
   const bubbleIcon = cache.get(BASE_ASSETS.dialogInfo);
   const playerPose = playerRender
-    ? getPlayerRenderPose(playerRender, now)
+    ? getPlayerRenderPose(playerRender, now, state.player.x, state.player.y)
     : { x: state.player.x, y: state.player.y, facing: "down" as Facing, moving: false };
 
   const tiles = tilesForChunk(state, cx, cy);
@@ -2191,8 +2204,8 @@ function drawChunkScene(
       ctx.fillStyle = "rgba(118, 90, 58, 0.08)";
       ctx.fillRect(px, py, TILE_PX, TILE_PX);
     } else if (tile.terrain === "road") {
-      ctx.fillStyle = "rgba(73, 43, 18, 0.2)";
-      ctx.fillRect(px + 2, py + 2, TILE_PX - 4, TILE_PX - 4);
+      ctx.fillStyle = "rgba(95, 62, 29, 0.1)";
+      ctx.fillRect(px, py, TILE_PX, TILE_PX);
     }
 
     if ((tile.terrain === "water" || terrainPick.sheet === "water") && water) {
@@ -2200,13 +2213,18 @@ function drawChunkScene(
     }
 
     if (tile.prop === "tree" && nature) {
-      const variants: Array<[number, number]> = [
-        [0, 0],
-        [32, 0],
-        [0, 32],
-        [32, 32],
+      // Verified GREEN 32×32 tree blocks from TilesetNature (384×336):
+      //   (0,0)=light green tree, (32,0)=dark green tree,
+      //   (256,0)=light green canopy, (288,0)=light green canopy
+      const treeVariants: Array<[number, number]> = [
+        [0, 0],     // Light green tree (canopy+trunk)
+        [32, 0],    // Dark green tree (canopy+trunk)
+        [256, 0],   // Light green canopy
+        [288, 0],   // Light green canopy
       ];
-      const [treeSx, treeSy] = variants[(entry.x * 3 + entry.y * 5) % variants.length] ?? variants[0];
+      const treeIdx = ((entry.x * 7 + entry.y * 13) & 0xffff) % treeVariants.length;
+      const [treeSx, treeSy] = treeVariants[treeIdx] ?? treeVariants[0];
+      const treeSize = Math.floor(TILE_PX * 1.4);
       drawSprite(
         ctx,
         nature,
@@ -2214,21 +2232,49 @@ function drawChunkScene(
         treeSy,
         32,
         32,
-        px - Math.floor(TILE_PX * 0.18),
-        py - Math.floor(TILE_PX * 0.42),
-        Math.floor(TILE_PX * 1.34),
-        Math.floor(TILE_PX * 1.34)
+        px - Math.floor(TILE_PX * 0.2),
+        py - Math.floor(TILE_PX * 0.5),
+        treeSize,
+        treeSize
       );
     } else if (tile.prop === "stump" && nature) {
-      drawSprite(ctx, nature, 0, 128, 16, 16, px + 8, py + 14, TILE_PX - 14, TILE_PX - 14);
+      // Brown stump: (16,96) rgb(123,71,60) u=26% opac=98%
+      drawSprite(ctx, nature, 16, 96, 16, 16, px + 6, py + 10, TILE_PX - 12, TILE_PX - 12);
+    } else if (tile.prop === "rock" && nature) {
+      // Verified grey/brown rock sprites from nature tileset
+      const rockVariants: Array<[number, number, number, number]> = [
+        [32, 96, 16, 16],   // Grey stone rgb(78,72,74) u=39% opac=96%
+        [16, 112, 16, 16],  // Grey rock rgb(78,72,74) u=23% opac=78%
+        [48, 112, 16, 16],  // Grey rock rgb(78,72,74) u=22% opac=78%
+      ];
+      const rockIdx = ((entry.x * 5 + entry.y * 11) & 0xffff) % rockVariants.length;
+      const [rsx, rsy, rsw, rsh] = rockVariants[rockIdx] ?? rockVariants[0];
+      drawSprite(ctx, nature, rsx, rsy, rsw, rsh, px + 4, py + 5, TILE_PX - 8, TILE_PX - 8);
     } else if (tile.prop === "rock" && rock) {
       drawSprite(ctx, rock, 0, 0, rock.width, rock.height, px + 5, py + 6, TILE_PX - 9, TILE_PX - 9);
-    } else if (tile.prop === "cactus" && desert) {
-      drawSprite(ctx, desert, 96, 0, 16, 32, px + 10, py + 2, TILE_PX - 16, TILE_PX - 2);
-    } else if (tile.prop === "palm" && desert) {
-      drawSprite(ctx, desert, 160, 64, 32, 32, px - 3, py - 8, TILE_PX * 1.2, TILE_PX * 1.2);
-    } else if (tile.prop === "ruin" && desert) {
-      drawSprite(ctx, desert, 126, 42, 32, 25, px + 2, py + 8, TILE_PX - 4, TILE_PX - 8);
+    } else if (tile.prop === "cactus") {
+      // Programmatic cactus — nature tileset lacks clear cactus sprites
+      ctx.fillStyle = "#5a8a3a";
+      ctx.fillRect(px + 13, py + 6, 5, TILE_PX - 10);
+      ctx.fillRect(px + 7, py + 10, 5, 7);
+      ctx.fillRect(px + 19, py + 13, 5, 5);
+      ctx.fillStyle = "#4a7a2e";
+      ctx.fillRect(px + 14, py + 7, 3, TILE_PX - 12);
+    } else if (tile.prop === "palm" && nature) {
+      // Sandy/autumn tree: (224,0) 32×32 brown canopy rgb(255,203,169) u=60%
+      drawSprite(ctx, nature, 224, 0, 32, 32, px - 4, py - 8, TILE_PX + 4, TILE_PX + 8);
+    } else if (tile.prop === "palm") {
+      ctx.fillStyle = "#7c5a2e";
+      ctx.fillRect(px + 13, py + 8, 4, TILE_PX - 10);
+      ctx.fillStyle = "#5ea84a";
+      ctx.beginPath();
+      ctx.arc(px + 15, py + 6, 8, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (tile.prop === "ruin" && nature) {
+      // Grey stone for ruins: (32,96) rgb(78,72,74) u=39% opac=96%
+      drawSprite(ctx, nature, 32, 96, 16, 16, px + 3, py + 4, TILE_PX - 6, TILE_PX - 6);
+    } else if (tile.prop === "ruin" && rock) {
+      drawSprite(ctx, rock, 0, 0, rock.width, rock.height, px + 4, py + 5, TILE_PX - 8, TILE_PX - 8);
     } else if (tile.prop === "crate" && chest) {
       drawSprite(ctx, chest, 0, 0, chest.width, chest.height, px + 6, py + 6, TILE_PX - 10, TILE_PX - 10);
     }
@@ -2236,17 +2282,26 @@ function drawChunkScene(
 
   const activeTrail = trail
     .filter((entry) => entry.chunkKey === `${cx}_${cy}`)
-    .slice(-20);
+    .slice(-10);
   for (const entry of activeTrail) {
     const age = Date.now() - entry.startedAt;
-    const fade = clamp(1 - age / 5600, 0.14, 0.58);
+    const fade = clamp(1 - age / 5200, 0.1, 0.38);
     const px = offsetX + (entry.x - startX) * TILE_PX;
     const py = offsetY + (entry.y - startY) * TILE_PX;
-    ctx.fillStyle = `rgba(196, 205, 214, ${0.1 * fade})`;
-    ctx.fillRect(px + 4, py + 4, TILE_PX - 8, TILE_PX - 8);
-    ctx.strokeStyle = `rgba(228, 236, 246, ${0.16 * fade})`;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(px + 6, py + 6, TILE_PX - 12, TILE_PX - 12);
+    const footprintW = Math.max(5, Math.floor(TILE_PX * 0.34));
+    const footprintH = Math.max(3, Math.floor(TILE_PX * 0.18));
+    ctx.fillStyle = `rgba(196, 205, 214, ${0.16 * fade})`;
+    ctx.beginPath();
+    ctx.ellipse(
+      px + TILE_PX * 0.5,
+      py + TILE_PX * 0.72,
+      footprintW,
+      footprintH,
+      0,
+      0,
+      Math.PI * 2
+    );
+    ctx.fill();
   }
 
   const decors = getDecorsForChunk(cx, cy);
@@ -2294,8 +2349,8 @@ function drawChunkScene(
     })
     .sort((a, b) => a.y - b.y);
 
-  const playerInChunk =
-    chunkOf(state.player.x, state.player.y).cx === cx && chunkOf(state.player.x, state.player.y).cy === cy;
+  const playerPoseChunk = chunkOf(Math.round(playerPose.x), Math.round(playerPose.y));
+  const playerInChunk = playerPoseChunk.cx === cx && playerPoseChunk.cy === cy;
 
   const drawables: Array<{ y: number; draw: () => void }> = actors.map((entry) => ({
     y: entry.y,
@@ -2310,15 +2365,22 @@ function drawChunkScene(
         return;
       }
       const moveFrame = Math.floor(now * 0.0033 + hashFloat(entry.actor.id) * 8) % 4;
-      const frame = entry.moving ? moveFrame : 0;
+      // Idle animation: slow breathing/sway cycle (frame 0 and 1 alternating)
+      const idlePhase = hashFloat(entry.actor.id) * 6000;
+      const idleFrame = Math.floor((now + idlePhase) * 0.0008) % 2;
+      const frame = entry.moving ? moveFrame : idleFrame;
       const row = entry.facing === "down" ? 0 : entry.facing === "up" ? 3 : entry.facing === "left" ? 1 : 2;
       const movingLeft = entry.facing === "left";
+      // Subtle idle bob for standing NPCs
+      const idleBob = entry.moving ? 0 : Math.sin((now + idlePhase) * 0.003) * 0.8;
 
       drawShadow(ctx, localX + TILE_PX / 2, localY + TILE_PX - 5, 10, 0.28);
       if (sprite.width >= 64 && sprite.height >= 64) {
-        drawSprite(ctx, sprite, frame * 16, row * 16, 16, 16, localX, localY, TILE_PX, TILE_PX);
+        drawSprite(ctx, sprite, frame * 16, row * 16, 16, 16, localX, localY + idleBob, TILE_PX, TILE_PX);
       } else {
-        const animalFrame = entry.moving ? Math.floor(now * 0.0024 + hashFloat(entry.actor.id) * 5) % 2 : 0;
+        const animalFrame = entry.moving
+          ? Math.floor(now * 0.0024 + hashFloat(entry.actor.id) * 5) % 2
+          : Math.floor((now + idlePhase) * 0.001) % 2;
         drawSpriteFlip(
           ctx,
           sprite,
@@ -2327,7 +2389,7 @@ function drawChunkScene(
           16,
           16,
           localX + 2,
-          localY + 6,
+          localY + 6 + idleBob,
           TILE_PX - 4,
           TILE_PX - 4,
           !!movingLeft
@@ -2413,7 +2475,7 @@ function drawBattleScene(
   if (field) {
     for (let y = 0; y < CHUNK_SIZE; y += 1) {
       for (let x = 0; x < CHUNK_SIZE; x += 1) {
-        const pick = (x + y) % 2 === 0 ? { sx: 0, sy: 96 } : { sx: 16, sy: 96 };
+        const pick = (x + y) % 2 === 0 ? { sx: 48, sy: 96 } : { sx: 16, sy: 112 };
         drawSprite(ctx, field, pick.sx, pick.sy, 16, 16, x * TILE_PX, y * TILE_PX, TILE_PX, TILE_PX);
       }
     }
@@ -2507,26 +2569,50 @@ function drawDecor(
     drawSprite(ctx, assets.house, 384, 32, 32, 32, x, y, w, h);
     return;
   }
+  if (kind === "guild_flag" && assets.house) {
+    // Red torii gate / DOJO sign from house tileset (top-left of second row ~y=64)
+    drawSprite(ctx, assets.house, 0, 80, 32, 32, x - 4, y - 4, TILE_PX + 8, TILE_PX + 8);
+    return;
+  }
   if (kind === "guild_flag" && assets.nature) {
-    drawSprite(ctx, assets.nature, 0, 224, 16, 16, x, y, TILE_PX, TILE_PX);
+    // Fallback: draw a simple guild banner
+    ctx.fillStyle = "#c04040";
+    ctx.fillRect(x + 12, y + 2, 8, TILE_PX - 6);
+    ctx.fillStyle = "#f0d060";
+    ctx.fillRect(x + 10, y + 2, 12, 8);
     return;
   }
   if (kind === "shop_stall" && assets.house) {
-    drawSprite(ctx, assets.house, 320, 240, 48, 32, x + 3, y + 4, w, h + Math.floor(TILE_PX * 0.6));
+    // Market stall with awning — house tileset around y=256 area
+    drawSprite(ctx, assets.house, 256, 256, 48, 32, x + 2, y + 3, w, h + Math.floor(TILE_PX * 0.45));
     return;
   }
   if (kind === "inn_sign" && assets.house) {
-    drawSprite(ctx, assets.house, 96, 64, 16, 16, x, y, TILE_PX, TILE_PX);
+    // Hanging sign / lantern from house tileset — small element area
+    drawSprite(ctx, assets.house, 480, 64, 16, 16, x + 4, y + 2, TILE_PX - 8, TILE_PX - 4);
+    return;
+  }
+  if (kind === "dungeon_gate" && assets.house) {
+    // Dark archway entry from house tileset (~y=128 cave entrances)
+    drawSprite(ctx, assets.house, 0, 128, 48, 48, x - 4, y - 6, w + 8, h + 6);
     return;
   }
   if (kind === "dungeon_gate" && assets.desert) {
     drawSprite(ctx, assets.desert, 160, 112, 32, 32, x, y, w, h);
     return;
   }
+  if (kind === "boss_gate" && assets.house) {
+    // Larger dark archway with red tint for boss
+    ctx.save();
+    ctx.filter = "hue-rotate(-25deg) saturate(1.4) brightness(0.85)";
+    drawSprite(ctx, assets.house, 0, 128, 48, 48, x - 4, y - 6, w + 8, h + 6);
+    ctx.restore();
+    return;
+  }
   if (kind === "boss_gate" && assets.desert) {
     ctx.save();
     ctx.filter = "hue-rotate(-25deg) saturate(1.2)";
-    drawSprite(ctx, assets.desert ?? assets.house ?? assets.field!, 192, 112, 32, 32, x, y, w, h);
+    drawSprite(ctx, assets.desert, 192, 112, 32, 32, x, y, w, h);
     ctx.restore();
   }
 }
@@ -2617,81 +2703,61 @@ function pickTerrainTile(terrain: string, x: number, y: number, sceneMode: Scene
   sw: number;
   sh: number;
 } {
-  const pick = (choices: Array<[number, number]>): [number, number] => {
-    const idx = Math.abs(x * 11 + y * 7 + x * y) % choices.length;
-    return choices[idx] ?? choices[0];
-  };
+  // TilesetField.png: 80×240, autotile = 5 cols × 3 rows per block (16×16 cells).
+  // FILL tiles (no borders) — verified by pixel uniformity analysis:
+  //   [1,1]=98%, [3,0]/[4,0]=96%, [3,1]/[4,1]=94%  ← USE THESE
+  //   Row 2 cols 0-2 = EDGE/BORDER (22-26%)          ← NEVER use
+  //
+  // Block 0 (y=0):   Orange  → ROAD
+  // Block 1 (y=48):  Yellow-green → GRASS
+  // Block 2 (y=96):  Dark green → FOREST
+  // Block 3 (y=144): Peach → DESERT
+  // Block 4 (y=192): White → VILLAGE
+
+  const hash = ((x * 7 + y * 13) & 0xffff) % 4;
+  const pick = (variants: Array<[number, number]>): [number, number] =>
+    variants[hash % variants.length] ?? variants[0];
 
   if (sceneMode === "dungeon" || sceneMode === "boss") {
-    const [sx, sy] = pick([
-      [0, 16],
-      [16, 16],
-      [32, 16],
-    ]);
+    const [sx, sy] = pick([[0, 0], [16, 0], [32, 0], [48, 0]]);
     return { sheet: "dungeon", sx, sy, sw: 16, sh: 16 };
   }
 
-  if (terrain === "forest") {
-    const [sx, sy] = pick([
-      [16, 32],
-      [32, 32],
-      [16, 64],
-      [32, 64],
-    ]);
+  if (terrain === "grass") {
+    // Block 1 fills: (16,64)98%, (48,48)96%, (64,48)96%, (48,64)94%
+    const [sx, sy] = pick([[16, 64], [48, 48], [64, 48], [48, 64]]);
     return { sheet: "field", sx, sy, sw: 16, sh: 16 };
   }
-  const inVillageChunk = x >= 16 && x < 32 && y >= 16 && y < 32;
+  if (terrain === "forest") {
+    // Block 2 fills: (16,112)98%, (48,96)96%, (64,96)96%, (48,112)94%
+    const [sx, sy] = pick([[16, 112], [48, 96], [64, 96], [48, 112]]);
+    return { sheet: "field", sx, sy, sw: 16, sh: 16 };
+  }
+  if (terrain === "road") {
+    // Block 0 fills: (16,16)98%, (48,0)96%, (64,0)96%, (48,16)94%
+    const [sx, sy] = pick([[16, 16], [48, 0], [64, 0], [48, 16]]);
+    return { sheet: "field", sx, sy, sw: 16, sh: 16 };
+  }
   if (terrain === "village") {
-    const [sx, sy] = pick([
-      [304, 80],
-      [320, 80],
-      [336, 80],
-      [352, 80],
-      [304, 96],
-      [320, 96],
-    ]);
-    return { sheet: "house", sx, sy, sw: 16, sh: 16 };
+    // Block 4 fills: (16,208)98%, (48,192)96%, (64,192)96%, (48,208)94%
+    const [sx, sy] = pick([[16, 208], [48, 192], [64, 192], [48, 208]]);
+    return { sheet: "field", sx, sy, sw: 16, sh: 16 };
   }
-  if (terrain === "road" && inVillageChunk) {
-    const [sx, sy] = pick([
-      [400, 48],
-      [432, 48],
-      [400, 64],
-      [304, 176],
-      [320, 176],
-      [432, 192],
-    ]);
-    return { sheet: "house", sx, sy, sw: 16, sh: 16 };
-  }
-  if (terrain === "desert" || terrain === "road" || terrain === "grass") {
-    const [sx, sy] = pick([
-      [0, 0],
-      [16, 0],
-      [32, 0],
-    ]);
+  if (terrain === "desert") {
+    // Block 3 fills: (16,160)98%, (48,144)96%, (64,144)96%, (48,160)94%
+    const [sx, sy] = pick([[16, 160], [48, 144], [64, 144], [48, 160]]);
     return { sheet: "field", sx, sy, sw: 16, sh: 16 };
   }
   if (terrain === "water") {
-    const [sx, sy] = pick([
-      [0, 0],
-      [16, 0],
-    ]);
+    const [sx, sy] = pick([[0, 0], [16, 0]]);
     return { sheet: "water", sx, sy, sw: 16, sh: 16 };
   }
   if (terrain === "dungeon" || terrain === "stone" || terrain === "boss") {
-    const [sx, sy] = pick([
-      [0, 16],
-      [16, 16],
-      [32, 16],
-    ]);
+    const [sx, sy] = pick([[0, 0], [16, 0], [32, 0], [48, 0]]);
     return { sheet: "dungeon", sx, sy, sw: 16, sh: 16 };
   }
-  const [sx, sy] = pick([
-    [16, 32],
-    [32, 32],
-    [16, 64],
-    [32, 64],
-  ]);
+  // Default: grass fills
+  const [sx, sy] = pick([[16, 64], [48, 48], [64, 48], [48, 64]]);
   return { sheet: "field", sx, sy, sw: 16, sh: 16 };
 }
 
@@ -2807,6 +2873,7 @@ function hydrateState(state: SoloGameState): SoloGameState {
     next.player.characterIdle =
       "/assets/Ninja Adventure - Asset Pack/Ninja Adventure - Asset Pack/Actor/Characters/Boy/SeparateAnim/Idle.png";
   }
+  enforceWorldCoherence(next);
   return next;
 }
 

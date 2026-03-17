@@ -37,19 +37,37 @@ export type SceneDecor = {
   kind: SceneDecorKind;
 };
 
+export const WORLD_LAYOUT_VERSION = "solo_map_v10";
+
+type CanonicalPoi = Exclude<PoiType, null>;
+type PoiPlacement = { poi: CanonicalPoi; x: number; y: number; anchorX: number; anchorY: number };
+
+const CANONICAL_POI_PLACEMENTS: PoiPlacement[] = [
+  { poi: "camp", x: 24, y: 26, anchorX: 24, anchorY: 25.7 },
+  { poi: "guild", x: 18, y: 23, anchorX: 18.2, anchorY: 22.2 },
+  { poi: "inn", x: 24, y: 23, anchorX: 24.2, anchorY: 22.2 },
+  { poi: "shop", x: 27, y: 23, anchorX: 27.2, anchorY: 22.2 },
+  { poi: "house", x: 18, y: 22, anchorX: 24.2, anchorY: 17.2 },
+  { poi: "house", x: 24, y: 22, anchorX: 24.2, anchorY: 17.2 },
+  { poi: "house", x: 30, y: 22, anchorX: 24.2, anchorY: 17.2 },
+  { poi: "dungeon_gate", x: 24, y: 40, anchorX: 24, anchorY: 39.25 },
+  { poi: "boss_gate", x: 40, y: 40, anchorX: 40, anchorY: 39.25 },
+];
+
+const PROTECTED_PATH_TILES: Array<{ x: number; y: number }> = [
+  { x: 18, y: 23 },
+  { x: 24, y: 23 },
+  { x: 27, y: 23 },
+  { x: 24, y: 26 },
+];
+
 const DECORS: SceneDecor[] = [
-  { id: "v_house_a", screenX: 1, screenY: 1, x: 17, y: 18, w: 4, h: 4, kind: "house_a" },
-  { id: "v_house_b", screenX: 1, screenY: 1, x: 23, y: 18, w: 4, h: 4, kind: "house_b" },
-  { id: "v_house_c", screenX: 1, screenY: 1, x: 29, y: 18, w: 4, h: 4, kind: "house_c" },
-  { id: "v_guild_flag", screenX: 1, screenY: 1, x: 17, y: 22, w: 1, h: 1, kind: "guild_flag" },
-  { id: "v_inn_sign", screenX: 1, screenY: 1, x: 20, y: 22, w: 1, h: 1, kind: "inn_sign" },
-  { id: "v_shop_stall", screenX: 1, screenY: 1, x: 26, y: 22, w: 2, h: 2, kind: "shop_stall" },
-  { id: "v_well", screenX: 1, screenY: 1, x: 24, y: 27, w: 1, h: 1, kind: "well" },
-  { id: "v_fence_left", screenX: 1, screenY: 1, x: 16, y: 19, w: 1, h: 4, kind: "fence_v" },
-  { id: "v_fence_right", screenX: 1, screenY: 1, x: 33, y: 19, w: 1, h: 4, kind: "fence_v" },
-  { id: "d_ruin_1", screenX: 2, screenY: 1, x: 35, y: 19, w: 3, h: 3, kind: "ruin_a" },
-  { id: "d_ruin_2", screenX: 2, screenY: 1, x: 40, y: 21, w: 3, h: 3, kind: "ruin_b" },
-  { id: "d_palms", screenX: 2, screenY: 1, x: 43, y: 24, w: 2, h: 2, kind: "palm_cluster" },
+  { id: "v_house_a", screenX: 1, screenY: 1, x: 17, y: 17, w: 4, h: 4, kind: "house_a" },
+  { id: "v_house_b", screenX: 1, screenY: 1, x: 23, y: 17, w: 4, h: 4, kind: "house_c" },
+  { id: "v_house_c", screenX: 1, screenY: 1, x: 28, y: 17, w: 4, h: 4, kind: "house_a" },
+  { id: "v_guild_flag", screenX: 1, screenY: 1, x: 18, y: 22, w: 1, h: 1, kind: "guild_flag" },
+  { id: "v_inn_sign", screenX: 1, screenY: 1, x: 24, y: 22, w: 1, h: 1, kind: "inn_sign" },
+  { id: "v_shop_stall", screenX: 1, screenY: 1, x: 26, y: 22, w: 2, h: 1, kind: "shop_stall" },
   { id: "dg_gate", screenX: 1, screenY: 2, x: 23, y: 39, w: 2, h: 2, kind: "dungeon_gate" },
   { id: "boss_gate", screenX: 2, screenY: 2, x: 40, y: 40, w: 2, h: 2, kind: "boss_gate" },
 ];
@@ -123,7 +141,7 @@ export function createInitialSoloState(input: {
     },
   ];
 
-  return {
+  const state: SoloGameState = {
     status: "playing",
     turn: 1,
     worldWidth: WORLD_WIDTH,
@@ -196,6 +214,9 @@ export function createInitialSoloState(input: {
     lastAction: "Debut de partie",
     lastNarration: "Tu arrives au camp du village central.",
   };
+
+  enforceWorldCoherence(state);
+  return state;
 }
 
 export function idxOf(x: number, y: number): number {
@@ -311,6 +332,20 @@ export function getDecorsForChunk(cx: number, cy: number): SceneDecor[] {
   return DECORS.filter((entry) => entry.screenX === cx && entry.screenY === cy);
 }
 
+export function getPoiAnchor(
+  cx: number,
+  cy: number,
+  poi: Exclude<PoiType, null>
+): { x: number; y: number } | null {
+  const found = CANONICAL_POI_PLACEMENTS.find((entry) => {
+    if (entry.poi !== poi) return false;
+    const chunk = chunkOf(entry.x, entry.y);
+    return chunk.cx === cx && chunk.cy === cy;
+  });
+  if (!found) return null;
+  return { x: found.anchorX, y: found.anchorY };
+}
+
 function createTiles(): Tile[] {
   const tiles: Tile[] = new Array(WORLD_WIDTH * WORLD_HEIGHT);
 
@@ -337,13 +372,13 @@ function createTiles(): Tile[] {
   paintScreen(tiles, 2, 2, "boss");
 
   // Core roads: east-west main route, then north-south village spine.
-  paintRoadBandHorizontal(tiles, 23, 24, 1, WORLD_WIDTH - 2);
-  paintRoadBandVertical(tiles, 23, 24, 8, WORLD_HEIGHT - 2);
+  paintRoadBandHorizontal(tiles, 23, 23, 1, WORLD_WIDTH - 2);
+  paintRoadBandVertical(tiles, 23, 23, 8, WORLD_HEIGHT - 2);
 
   // Village plaza to break monotony and keep readable POI flow.
   paintRect(tiles, 20, 22, 10, 6, { terrain: "road", blocked: false, destructible: false });
-  paintRect(tiles, 17, 17, 17, 6, { terrain: "village", blocked: false, destructible: false });
-  paintRect(tiles, 21, 25, 7, 4, { terrain: "village", blocked: false, destructible: false });
+  paintRect(tiles, 16, 16, 16, 7, { terrain: "village", blocked: false, destructible: false });
+  paintRect(tiles, 20, 25, 8, 4, { terrain: "village", blocked: false, destructible: false });
 
   // Water boundaries.
   for (let x = 0; x < WORLD_WIDTH; x += 1) {
@@ -355,18 +390,10 @@ function createTiles(): Tile[] {
     setTile(tiles, WORLD_WIDTH - 1, y, { terrain: "water", blocked: true });
   }
 
-  // Dungeon and boss gates.
-  setPoi(tiles, 24, 40, "dungeon_gate");
-  setPoi(tiles, 40, 40, "boss_gate");
-
-  // Village POI.
-  setPoi(tiles, 24, 25, "camp");
-  setPoi(tiles, 18, 23, "guild");
-  setPoi(tiles, 27, 23, "shop");
-  setPoi(tiles, 21, 24, "inn");
-  setPoi(tiles, 19, 22, "house");
-  setPoi(tiles, 25, 22, "house");
-  setPoi(tiles, 31, 22, "house");
+  // Canonical POI layout.
+  for (const poi of CANONICAL_POI_PLACEMENTS) {
+    setPoi(tiles, poi.x, poi.y, poi.poi);
+  }
 
   // Handcrafted resources (no random placement).
   addForestZoneProps(tiles);
@@ -379,6 +406,7 @@ function createTiles(): Tile[] {
   clearRoadProps(tiles, 24, "vertical");
   clearRoadProps(tiles, 23, "horizontal");
   clearRoadProps(tiles, 24, "horizontal");
+  clearProtectedPathTiles(tiles);
 
   return tiles;
 }
@@ -400,8 +428,9 @@ function createActors(): WorldActor[] {
       dialogue: [
         "La guilde recrute des aventuriers audacieux.",
         "Si tu veux du rang, prouve ta valeur dans le donjon.",
+        "Les quetes de rang S ne sont pas pour les faibles.",
       ],
-      patrol: { axis: "y", range: 0, speed: 0, phase: 0.2 },
+      patrol: { axis: "y", range: 0.2, speed: 0.35, phase: 0.2 },
     },
     {
       id: "npc_shopkeeper",
@@ -415,14 +444,18 @@ function createActors(): WorldActor[] {
       alive: true,
       sprite: `${CHARACTER_BASE}/OldMan2/SeparateAnim/Walk.png`,
       face: `${CHARACTER_BASE}/OldMan2/Faceset.png`,
-      dialogue: ["Mes prix changent selon le danger du moment.", "Tu veux acheter ou vendre ?"],
-      patrol: { axis: "x", range: 0, speed: 0, phase: 0.7 },
+      dialogue: [
+        "Mes prix changent selon le danger du moment.",
+        "Tu veux acheter ou vendre ?",
+        "J ai recu des potions fraiches ce matin.",
+      ],
+      patrol: { axis: "x", range: 0.2, speed: 0.3, phase: 0.7 },
     },
     {
       id: "npc_innkeeper",
       name: "Aubergiste",
       kind: "npc",
-      x: 21,
+      x: 24,
       y: 24,
       hp: 14,
       maxHp: 14,
@@ -430,14 +463,18 @@ function createActors(): WorldActor[] {
       alive: true,
       sprite: `${CHARACTER_BASE}/OldWoman/SeparateAnim/Walk.png`,
       face: `${CHARACTER_BASE}/OldWoman/Faceset.png`,
-      dialogue: ["Un repos ici reduit ton stress.", "Le demon rode pres des ruines du sud-est."],
-      patrol: { axis: "x", range: 0, speed: 0, phase: 1.1 },
+      dialogue: [
+        "Un repos ici reduit ton stress.",
+        "Le demon rode pres des ruines du sud-est.",
+        "Fais attention dans les dunes, aventurier.",
+      ],
+      patrol: { axis: "x", range: 0.2, speed: 0.3, phase: 1.1 },
     },
     {
       id: "npc_villager_square_a",
       name: "Villageois",
       kind: "npc",
-      x: 23,
+      x: 22,
       y: 27,
       hp: 10,
       maxHp: 10,
@@ -445,8 +482,11 @@ function createActors(): WorldActor[] {
       alive: true,
       sprite: `${CHARACTER_BASE}/Villager/SeparateAnim/Walk.png`,
       face: `${CHARACTER_BASE}/Villager/Faceset.png`,
-      dialogue: ["La place est plus sure depuis l arrivee des aventuriers."],
-      patrol: { axis: "x", range: 0.16, speed: 0.18, phase: 0.35 },
+      dialogue: [
+        "La place est plus sure depuis l arrivee des aventuriers.",
+        "Tu as vu le chat du village ? Il traine partout.",
+      ],
+      patrol: { axis: "x", range: 0.3, speed: 0.4, phase: 0.35 },
     },
     {
       id: "npc_villager_square_b",
@@ -460,15 +500,54 @@ function createActors(): WorldActor[] {
       alive: true,
       sprite: `${CHARACTER_BASE}/Villager2/SeparateAnim/Walk.png`,
       face: `${CHARACTER_BASE}/Villager2/Faceset.png`,
-      dialogue: ["Les routes sont ouvertes, mais les dunes restent dangereuses."],
-      patrol: { axis: "y", range: 0.16, speed: 0.18, phase: 0.55 },
+      dialogue: [
+        "Les routes sont ouvertes, mais les dunes restent dangereuses.",
+        "Si tu ramenes du minerai, je pourrai forger quelque chose.",
+      ],
+      patrol: { axis: "y", range: 0.3, speed: 0.4, phase: 0.55 },
+    },
+    {
+      id: "npc_guard_road",
+      name: "Garde",
+      kind: "npc",
+      x: 20,
+      y: 23,
+      hp: 16,
+      maxHp: 16,
+      hostile: false,
+      alive: true,
+      sprite: `${CHARACTER_BASE}/KnightGold/SeparateAnim/Walk.png`,
+      face: `${CHARACTER_BASE}/KnightGold/Faceset.png`,
+      dialogue: [
+        "La route principale est securisee.",
+        "Ne t aventure pas au sud sans preparation.",
+      ],
+      patrol: { axis: "x", range: 0.3, speed: 0.35, phase: 1.4 },
+    },
+    {
+      id: "npc_child_village",
+      name: "Enfant",
+      kind: "npc",
+      x: 26,
+      y: 26,
+      hp: 6,
+      maxHp: 6,
+      hostile: false,
+      alive: true,
+      sprite: `${CHARACTER_BASE}/Child/SeparateAnim/Walk.png`,
+      face: `${CHARACTER_BASE}/Child/Faceset.png`,
+      dialogue: [
+        "Un jour je serai aventurier comme toi !",
+        "Le chat a vole un poisson au marche !",
+      ],
+      patrol: { axis: "x", range: 0.4, speed: 0.5, phase: 0.9 },
     },
     {
       id: "animal_cat_village",
       name: "Chat",
       kind: "animal",
       x: 25,
-      y: 27,
+      y: 28,
       hp: 6,
       maxHp: 6,
       hostile: false,
@@ -476,7 +555,7 @@ function createActors(): WorldActor[] {
       sprite: `${ANIMAL_BASE}/Cat/SpriteSheet.png`,
       face: `${ANIMAL_BASE}/Cat/Faceset.png`,
       dialogue: ["Miaou."],
-      patrol: { axis: "x", range: 0.2, speed: 0.22, phase: 0.4 },
+      patrol: { axis: "x", range: 0.4, speed: 0.5, phase: 0.4 },
     },
     {
       id: "animal_dog_forest",
@@ -491,7 +570,7 @@ function createActors(): WorldActor[] {
       sprite: `${ANIMAL_BASE}/Dog/SpriteSheet.png`,
       face: `${ANIMAL_BASE}/Dog/Faceset.png`,
       dialogue: ["Wouf."],
-      patrol: { axis: "y", range: 0.34, speed: 0.28, phase: 2.2 },
+      patrol: { axis: "y", range: 0.4, speed: 0.45, phase: 2.2 },
     },
     {
       id: "animal_chicken_desert",
@@ -506,7 +585,22 @@ function createActors(): WorldActor[] {
       sprite: `${ANIMAL_BASE}/Chicken/SpriteSheetWhite.png`,
       face: `${ANIMAL_BASE}/Chicken/FacesetWhite.png`,
       dialogue: ["Cot cot."],
-      patrol: { axis: "x", range: 0.3, speed: 0.3, phase: 1.8 },
+      patrol: { axis: "x", range: 0.4, speed: 0.5, phase: 1.8 },
+    },
+    {
+      id: "animal_frog_dungeon",
+      name: "Grenouille",
+      kind: "animal",
+      x: 22,
+      y: 36,
+      hp: 4,
+      maxHp: 4,
+      hostile: false,
+      alive: true,
+      sprite: `${ANIMAL_BASE}/Frog/SpriteSheet.png`,
+      face: `${ANIMAL_BASE}/Frog/Faceset.png`,
+      dialogue: ["Croaa."],
+      patrol: { axis: "y", range: 0.3, speed: 0.4, phase: 3.1 },
     },
   ];
 
@@ -543,11 +637,11 @@ function spawnHostiles(): WorldActor[] {
       dialogue: template.kind === "boss" ? ["Je suis ton destin final."] : [],
       patrol:
         template.kind === "boss"
-          ? { axis: "x", range: 0.2, speed: 0.2, phase: 0.9 }
+          ? { axis: "x", range: 0.3, speed: 0.35, phase: 0.9 }
           : {
               axis: index % 2 === 0 ? "x" : "y",
-              range: 0.25,
-              speed: 0.22 + (index % 3) * 0.05,
+              range: 0.35,
+              speed: 0.35 + (index % 3) * 0.06,
               phase: index * 0.6,
             },
     };
@@ -678,16 +772,6 @@ function addDesertZoneProps(tiles: Tile[]): void {
   ];
   desertCactus.forEach(([x, y]) => placeProp(tiles, x, y, "cactus", true));
 
-  const desertPalms: Array<[number, number]> = [
-    [37, 20],
-    [42, 22],
-    [44, 25],
-    [35, 29],
-    [39, 30],
-    [45, 31],
-  ];
-  desertPalms.forEach(([x, y]) => placeProp(tiles, x, y, "palm", false));
-
   const desertRocks: Array<[number, number]> = [
     [34, 18],
     [36, 19],
@@ -700,7 +784,7 @@ function addDesertZoneProps(tiles: Tile[]): void {
 }
 
 function addDungeonZoneProps(tiles: Tile[]): void {
-  const ruins: Array<[number, number]> = [
+  const stoneDebris: Array<[number, number]> = [
     [19, 34],
     [22, 35],
     [27, 34],
@@ -708,7 +792,7 @@ function addDungeonZoneProps(tiles: Tile[]): void {
     [21, 42],
     [26, 43],
   ];
-  ruins.forEach(([x, y]) => placeProp(tiles, x, y, "ruin", true));
+  stoneDebris.forEach(([x, y]) => placeProp(tiles, x, y, "rock", true));
 
   const crates: Array<[number, number]> = [
     [34, 34],
@@ -751,6 +835,186 @@ function clearRoadProps(tiles: Tile[], axis: number, orientation: "vertical" | "
     setTile(tiles, x, axis, { prop: "none", blocked: false, destructible: false });
     setTile(tiles, x, axis - 1, { prop: "none", blocked: false, destructible: false });
   }
+}
+
+function clearProtectedPathTiles(tiles: Tile[]): void {
+  for (const pathTile of PROTECTED_PATH_TILES) {
+    setTile(tiles, pathTile.x, pathTile.y, {
+      terrain: "road",
+      blocked: false,
+      destructible: false,
+      prop: "none",
+    });
+  }
+}
+
+function isWalkableTile(tile: Tile | undefined): boolean {
+  if (!tile) return false;
+  if (tile.blocked) return false;
+  if (tile.terrain === "water") return false;
+  return true;
+}
+
+function findNearestWalkable(
+  state: SoloGameState,
+  startX: number,
+  startY: number,
+  chunkX: number,
+  chunkY: number,
+  occupied: Set<string>
+): { x: number; y: number } | null {
+  const originX = Math.min(Math.max(Math.round(startX), 0), WORLD_WIDTH - 1);
+  const originY = Math.min(Math.max(Math.round(startY), 0), WORLD_HEIGHT - 1);
+  const minX = chunkX * CHUNK_SIZE;
+  const maxX = minX + CHUNK_SIZE - 1;
+  const minY = chunkY * CHUNK_SIZE;
+  const maxY = minY + CHUNK_SIZE - 1;
+
+  for (let radius = 0; radius <= 10; radius += 1) {
+    for (let dy = -radius; dy <= radius; dy += 1) {
+      for (let dx = -radius; dx <= radius; dx += 1) {
+        if (Math.abs(dx) + Math.abs(dy) > radius) continue;
+        const x = originX + dx;
+        const y = originY + dy;
+        if (x < minX || x > maxX || y < minY || y > maxY) continue;
+        if (!inBounds(x, y)) continue;
+        const key = `${x},${y}`;
+        if (occupied.has(key)) continue;
+        const tile = state.tiles[idxOf(x, y)];
+        if (!isWalkableTile(tile)) continue;
+        if (tile?.poi === "house" || tile?.poi === "dungeon_gate" || tile?.poi === "boss_gate") continue;
+        return { x, y };
+      }
+    }
+  }
+  return null;
+}
+
+function normalizeActorPositions(state: SoloGameState): void {
+  const occupied = new Set<string>([`${Math.round(state.player.x)},${Math.round(state.player.y)}`]);
+  for (const actor of state.actors) {
+    if (!actor.alive) continue;
+    const rawX = Math.min(Math.max(Math.round(actor.x), 0), WORLD_WIDTH - 1);
+    const rawY = Math.min(Math.max(Math.round(actor.y), 0), WORLD_HEIGHT - 1);
+    const { cx, cy } = chunkOf(rawX, rawY);
+    const tile = inBounds(rawX, rawY) ? state.tiles[idxOf(rawX, rawY)] : undefined;
+    const key = `${rawX},${rawY}`;
+    if (isWalkableTile(tile) && !occupied.has(key)) {
+      actor.x = rawX;
+      actor.y = rawY;
+      occupied.add(key);
+      continue;
+    }
+
+    const fallback = findNearestWalkable(state, rawX, rawY, cx, cy, occupied);
+    if (!fallback) continue;
+    actor.x = fallback.x;
+    actor.y = fallback.y;
+    occupied.add(`${fallback.x},${fallback.y}`);
+  }
+}
+
+function normalizePlayerPosition(state: SoloGameState): void {
+  if (!Number.isFinite(state.player.x) || !Number.isFinite(state.player.y)) {
+    state.player.x = 24;
+    state.player.y = 25;
+  }
+  const playerX = Math.min(Math.max(Math.round(state.player.x), 0), WORLD_WIDTH - 1);
+  const playerY = Math.min(Math.max(Math.round(state.player.y), 0), WORLD_HEIGHT - 1);
+  state.player.x = playerX;
+  state.player.y = playerY;
+
+  const tile = state.tiles[idxOf(playerX, playerY)];
+  if (isWalkableTile(tile)) return;
+  const { cx, cy } = chunkOf(playerX, playerY);
+  const safeTile = findNearestWalkable(state, playerX, playerY, cx, cy, new Set());
+  if (safeTile) {
+    state.player.x = safeTile.x;
+    state.player.y = safeTile.y;
+    return;
+  }
+  state.player.x = 24;
+  state.player.y = 25;
+}
+
+function normalizeTilePropsForBiome(tiles: Tile[]): void {
+  for (let y = 0; y < WORLD_HEIGHT; y += 1) {
+    for (let x = 0; x < WORLD_WIDTH; x += 1) {
+      const index = idxOf(x, y);
+      const tile = tiles[index];
+      if (!tile) continue;
+
+      let nextProp: TileProp = tile.prop;
+      if (nextProp === "palm") nextProp = "cactus";
+      if (nextProp === "ruin") nextProp = "rock";
+
+      if (tile.poi !== null && nextProp !== "none") {
+        nextProp = "none";
+      }
+
+      if (nextProp === "tree" || nextProp === "stump") {
+        if (tile.terrain !== "forest" && tile.terrain !== "grass") nextProp = "none";
+      } else if (nextProp === "cactus") {
+        if (tile.terrain !== "desert") nextProp = "none";
+      } else if (nextProp === "crate") {
+        if (tile.terrain !== "dungeon" && tile.terrain !== "boss") nextProp = "none";
+      } else if (nextProp === "rock") {
+        if (tile.terrain === "water") nextProp = "none";
+      }
+
+      if (nextProp !== tile.prop) {
+        tiles[index] = {
+          ...tile,
+          prop: nextProp,
+          blocked: nextProp === "none" ? tile.blocked : true,
+          destructible: nextProp === "none" ? false : tile.destructible || true,
+        };
+      }
+    }
+  }
+}
+
+export function enforceWorldCoherence(state: SoloGameState): void {
+  if (!Array.isArray(state.tiles) || state.tiles.length !== WORLD_WIDTH * WORLD_HEIGHT) return;
+
+  for (let x = 0; x < WORLD_WIDTH; x += 1) {
+    setTile(state.tiles, x, 0, { terrain: "water", blocked: true, destructible: false, prop: "none" });
+    setTile(state.tiles, x, WORLD_HEIGHT - 1, {
+      terrain: "water",
+      blocked: true,
+      destructible: false,
+      prop: "none",
+    });
+  }
+  for (let y = 0; y < WORLD_HEIGHT; y += 1) {
+    setTile(state.tiles, 0, y, { terrain: "water", blocked: true, destructible: false, prop: "none" });
+    setTile(state.tiles, WORLD_WIDTH - 1, y, {
+      terrain: "water",
+      blocked: true,
+      destructible: false,
+      prop: "none",
+    });
+  }
+
+  for (const poi of CANONICAL_POI_PLACEMENTS) {
+    setTile(state.tiles, poi.x, poi.y, {
+      poi: poi.poi,
+      blocked: false,
+      destructible: false,
+      prop: "none",
+    });
+  }
+
+  clearRoadProps(state.tiles, 23, "vertical");
+  clearRoadProps(state.tiles, 24, "vertical");
+  clearRoadProps(state.tiles, 23, "horizontal");
+  clearRoadProps(state.tiles, 24, "horizontal");
+  clearProtectedPathTiles(state.tiles);
+  normalizeTilePropsForBiome(state.tiles);
+
+  applyDecorCollisionFootprints(state.tiles);
+  normalizePlayerPosition(state);
+  normalizeActorPositions(state);
 }
 
 export const UI_ASSETS = {

@@ -5,6 +5,7 @@ import type { PoiType, SoloOutcome, SoloResolveRequest, SpawnActor, TerrainChang
 
 const MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
 const groq = process.env.GROQ_API_KEY ? new Groq({ apiKey: process.env.GROQ_API_KEY }) : null;
+const MAX_MOVE_TO_POI_STEPS = 8;
 
 const MONSTER_SPAWN_FALLBACK = {
   sprite:
@@ -130,8 +131,8 @@ function sanitizeOutcome(payload: Record<string, unknown>, input: SoloResolveReq
 
   const moveBy = moveRaw
     ? {
-        dx: clamp(asInt(moveRaw.dx, 0), -16, 16),
-        dy: clamp(asInt(moveRaw.dy, 0), -16, 16),
+        dx: clamp(asInt(moveRaw.dx, 0), -10, 10),
+        dy: clamp(asInt(moveRaw.dy, 0), -10, 10),
       }
     : undefined;
 
@@ -153,7 +154,7 @@ function sanitizeOutcome(payload: Record<string, unknown>, input: SoloResolveReq
         : clamp(asInt(payload.diceRoll, 10), 1, 20),
     moveBy: moveBy && (moveBy.dx !== 0 || moveBy.dy !== 0) ? moveBy : undefined,
     moveToPoi: moveToPoi ?? undefined,
-    moveToPoiSteps: clamp(asInt(payload.moveToPoiSteps, 4), 1, 12),
+    moveToPoiSteps: clamp(asInt(payload.moveToPoiSteps, 4), 1, MAX_MOVE_TO_POI_STEPS),
     approachNearestHostile: asBool(payload.approachNearestHostile, false),
     damageSelf: clamp(asInt(payload.damageSelf, 0), 0, 30),
     healSelf: clamp(asInt(payload.healSelf, 0), 0, 30),
@@ -259,22 +260,22 @@ function postProcessOutcome(outcome: SoloOutcome, input: SoloResolveRequest): So
   if (intent.wantsShop && !isNearPoi(ctx, "shop")) {
     next.moveBy = undefined;
     next.moveToPoi = "shop";
-    next.moveToPoiSteps = 12;
+    next.moveToPoiSteps = 6;
   }
 
   if (intent.wantsShop && (intent.wantsMove || intent.wantsBuy || intent.asksList) && !isNearPoi(ctx, "shop")) {
     next.moveToPoi = "shop";
-    next.moveToPoiSteps = 6;
+    next.moveToPoiSteps = 4;
   }
 
   if (intent.wantsGuild && (intent.wantsMove || intent.wantsQuest) && !isNearPoi(ctx, "guild")) {
     next.moveToPoi = "guild";
-    next.moveToPoiSteps = 6;
+    next.moveToPoiSteps = 4;
   }
 
   if (intent.wantsInn && (intent.wantsMove || intent.wantsRest) && !isNearPoi(ctx, "inn")) {
     next.moveToPoi = "inn";
-    next.moveToPoiSteps = 5;
+    next.moveToPoiSteps = 4;
   }
 
   if (intent.wantsHouse && isNearPoi(ctx, "house")) {
@@ -284,17 +285,17 @@ function postProcessOutcome(outcome: SoloOutcome, input: SoloResolveRequest): So
 
   if (intent.wantsHouse && intent.wantsNearest && (intent.wantsMove || intent.wantsTalk) && !isNearPoi(ctx, "house")) {
     next.moveToPoi = "house";
-    next.moveToPoiSteps = 6;
+    next.moveToPoiSteps = 4;
   }
 
   if (intent.wantsDungeon && intent.wantsMove && !isNearPoi(ctx, "dungeon_gate")) {
     next.moveToPoi = "dungeon_gate";
-    next.moveToPoiSteps = 8;
+    next.moveToPoiSteps = 5;
   }
 
   if (intent.wantsBoss && intent.wantsMove && !isNearPoi(ctx, "boss_gate")) {
     next.moveToPoi = "boss_gate";
-    next.moveToPoiSteps = 10;
+    next.moveToPoiSteps = 6;
   }
 
   if (intent.asksList && intent.wantsShop) {
@@ -302,7 +303,7 @@ function postProcessOutcome(outcome: SoloOutcome, input: SoloResolveRequest): So
     next.npcSpeech = renderShopStockList();
     if (!isNearPoi(ctx, "shop")) {
       next.moveToPoi = "shop";
-      next.moveToPoiSteps = 6;
+      next.moveToPoiSteps = 4;
       next.narrative = "Tu te diriges vers la boutique pour consulter le stock.";
     } else {
       next.narrative = "Le marchand te montre clairement ses articles.";
@@ -311,7 +312,7 @@ function postProcessOutcome(outcome: SoloOutcome, input: SoloResolveRequest): So
 
   if (intent.wantsBuy && !isNearPoi(ctx, "shop") && !next.moveToPoi) {
     next.moveToPoi = "shop";
-    next.moveToPoiSteps = 6;
+    next.moveToPoiSteps = 4;
     next.narrative = "Tu te mets en route vers la boutique avant d acheter.";
   }
 
@@ -319,7 +320,7 @@ function postProcessOutcome(outcome: SoloOutcome, input: SoloResolveRequest): So
     next.buyItemName = null;
     if (!next.moveToPoi) {
       next.moveToPoi = "shop";
-      next.moveToPoiSteps = 6;
+      next.moveToPoiSteps = 4;
     }
     next.narrative = "Tu te diriges d abord vers la boutique. L achat viendra une fois sur place.";
   }
@@ -340,13 +341,13 @@ function postProcessOutcome(outcome: SoloOutcome, input: SoloResolveRequest): So
 
   if (intent.wantsQuest && !isNearPoi(ctx, "guild") && !next.moveToPoi) {
     next.moveToPoi = "guild";
-    next.moveToPoiSteps = 6;
+    next.moveToPoiSteps = 4;
     next.narrative = "Tu cherches la guilde pour recuperer une mission.";
   }
 
   if (intent.wantsRest && !intent.wantsBuy && !isNearPoi(ctx, "inn") && !next.moveToPoi) {
     next.moveToPoi = "inn";
-    next.moveToPoiSteps = 5;
+    next.moveToPoiSteps = 4;
     next.narrative = "Tu avances vers l auberge pour recuperer.";
   }
 
@@ -361,9 +362,9 @@ function postProcessOutcome(outcome: SoloOutcome, input: SoloResolveRequest): So
     next.approachNearestHostile = true;
     next.moveBy = undefined;
     if (/jusqu|jusqua|jusqu au|jusqu a|aller voir/.test(text)) {
-      next.moveToPoiSteps = 24;
+      next.moveToPoiSteps = 8;
     } else if (!next.moveToPoiSteps) {
-      next.moveToPoiSteps = 16;
+      next.moveToPoiSteps = 6;
     }
     next.narrative = "Tu t approches prudemment de la menace.";
   }
@@ -388,11 +389,11 @@ function postProcessOutcome(outcome: SoloOutcome, input: SoloResolveRequest): So
         next.moveToPoiSteps = undefined;
         next.narrative = "Tu rates ton orientation et restes sur place.";
       } else if (next.diceRoll <= 10) {
-        next.moveToPoiSteps = 4;
+        next.moveToPoiSteps = 3;
       } else if (next.diceRoll <= 19) {
-        next.moveToPoiSteps = 8;
+        next.moveToPoiSteps = 5;
       } else {
-        next.moveToPoiSteps = 12;
+        next.moveToPoiSteps = 6;
       }
     }
     if (next.approachNearestHostile && next.diceRoll <= 5) {
@@ -443,7 +444,7 @@ function resolveLocally(input: SoloResolveRequest): SoloOutcome {
 
     if (poiTarget && !isNearPoi(ctx, poiTarget)) {
       outcome.moveToPoi = poiTarget;
-      outcome.moveToPoiSteps = roll !== null && roll <= 10 ? 3 : roll === 20 ? 12 : roll !== null && roll >= 15 ? 8 : 6;
+      outcome.moveToPoiSteps = roll !== null && roll <= 10 ? 2 : roll === 20 ? 6 : roll !== null && roll >= 15 ? 5 : 4;
       outcome.narrative = `Tu te diriges vers ${poiLabelFr(poiTarget)}.`;
     }
 
@@ -469,7 +470,7 @@ function resolveLocally(input: SoloResolveRequest): SoloOutcome {
   if (intent.wantsApproachHostile && !intent.wantsAttack) {
     outcome.approachNearestHostile = true;
     outcome.moveBy = undefined;
-    outcome.moveToPoiSteps = /jusqu|jusqua|jusqu au|jusqu a|aller voir/.test(text) ? 24 : 16;
+    outcome.moveToPoiSteps = /jusqu|jusqua|jusqu au|jusqu a|aller voir/.test(text) ? 8 : 6;
     outcome.narrative = "Tu avances vers la creature que tu as reperee.";
   }
 
@@ -496,7 +497,7 @@ function resolveLocally(input: SoloResolveRequest): SoloOutcome {
     outcome.npcSpeech = renderShopStockList();
     if (!isNearPoi(ctx, "shop")) {
       outcome.moveToPoi = "shop";
-      outcome.moveToPoiSteps = 6;
+      outcome.moveToPoiSteps = 4;
       outcome.narrative = "Tu te diriges vers la boutique pour voir la liste.";
     } else {
       outcome.narrative = "Le marchand te presente son stock.";
@@ -506,7 +507,7 @@ function resolveLocally(input: SoloResolveRequest): SoloOutcome {
   if (intent.wantsShop && !intent.asksList && !intent.wantsBuy) {
     if (!isNearPoi(ctx, "shop")) {
       outcome.moveToPoi = "shop";
-      outcome.moveToPoiSteps = 12;
+      outcome.moveToPoiSteps = 6;
       outcome.narrative = "Tu te diriges vers la boutique.";
     } else {
       outcome.talkToNearestNpc = true;
@@ -528,7 +529,7 @@ function resolveLocally(input: SoloResolveRequest): SoloOutcome {
       }
     } else {
       outcome.moveToPoi = "shop";
-      outcome.moveToPoiSteps = 6;
+      outcome.moveToPoiSteps = 4;
       outcome.narrative = "Tu dois d abord rejoindre la boutique.";
     }
   }
@@ -551,7 +552,7 @@ function resolveLocally(input: SoloResolveRequest): SoloOutcome {
   if (intent.wantsRest && !intent.wantsBuy) {
     if (!isNearPoi(ctx, "inn")) {
       outcome.moveToPoi = "inn";
-      outcome.moveToPoiSteps = 5;
+      outcome.moveToPoiSteps = 4;
       outcome.narrative = "Tu cherches l auberge pour te reposer.";
     } else {
       outcome.healSelf = roll === null ? 4 : Math.max(1, Math.floor((roll + 2) / 4));
@@ -738,9 +739,9 @@ function parseMove(text: string): { dx: number; dy: number } | null {
 
   let distance = 1;
   if (screenMove) {
-    distance = 16;
+    distance = 10;
   } else if (explicitTiles) {
-    distance = clamp(asInt(explicitTiles[1], 1), 1, 16);
+    distance = clamp(asInt(explicitTiles[1], 1), 1, 10);
   } else if (/leger|doucement|une case|1 case|petit pas/.test(text)) {
     distance = 1;
   }

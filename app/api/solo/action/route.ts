@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { applyOutcome, buildActionContext } from "@/lib/solo/logic";
 import { resolveSoloAction } from "@/lib/solo/resolve";
 import type { SoloGameState } from "@/lib/solo/types";
+import { enforceWorldCoherence } from "@/lib/solo/world";
 
 type ActionPayload = {
   actionText?: string;
@@ -56,6 +57,7 @@ function normalizeState(state: SoloGameState): SoloGameState {
   }
   normalized.player.x = Math.min(Math.max(Math.round(normalized.player.x), 0), normalized.worldWidth - 1);
   normalized.player.y = Math.min(Math.max(Math.round(normalized.player.y), 0), normalized.worldHeight - 1);
+  enforceWorldCoherence(normalized);
   return normalized;
 }
 
