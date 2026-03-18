@@ -26,6 +26,8 @@ Voir [`.env.example`](/c:/Users/Daiki/Desktop/Rollplay/.env.example).
   vue produit + gameplay + regles
 - [ENGINE_SPEC.md](/c:/Users/Daiki/Desktop/Rollplay/docs/ENGINE_SPEC.md)  
   architecture technique, types, protocoles, moteur cible
+- [INTERACTION_REWORK_SPEC.md](/c:/Users/Daiki/Desktop/Rollplay/docs/INTERACTION_REWORK_SPEC.md)  
+  pivot valide a implementer: clavier/souris, interaction contextuelle, entites monde, bulles, collisions
 - [ROADMAP_QA.md](/c:/Users/Daiki/Desktop/Rollplay/docs/ROADMAP_QA.md)  
   phases implementation, couverture actions, checklist QA
 

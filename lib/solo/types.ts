@@ -17,9 +17,26 @@ export type TerrainType =
 
 export type PoiType = "camp" | "guild" | "shop" | "inn" | "house" | "dungeon_gate" | "boss_gate" | null;
 
-export type TileProp = "none" | "tree" | "stump" | "rock" | "cactus" | "palm" | "ruin" | "crate";
+export type TileProp =
+  | "none"
+  | "tree"
+  | "stump"
+  | "rock"
+  | "cactus"
+  | "palm"
+  | "ruin"
+  | "crate"
+  | "hole"
+  | "crater"
+  | "charred"
+  | "rubble";
 
 export type RankTier = "C" | "B" | "A" | "S";
+
+export type WorldPoint = {
+  x: number;
+  y: number;
+};
 
 export type Tile = {
   terrain: TerrainType;
@@ -30,6 +47,108 @@ export type Tile = {
 };
 
 export type ActorKind = "npc" | "animal" | "monster" | "boss";
+
+export type WorldEntityKind = "actor" | "structure" | "poi" | "prop" | "tile" | "edge";
+
+export type WorldEntityRef = string;
+
+export type InteractionMode =
+  | "move"
+  | "talk"
+  | "interact"
+  | "inspect"
+  | "attack"
+  | "recruit"
+  | "context";
+
+export type FollowerOrder = "follow" | "hold" | "guard" | "attack";
+
+export type RecruitmentMode = "persuade" | "contract" | "tame";
+
+export type SpeechBubbleKind = "speech" | "thought" | "action" | "system";
+
+export type SpeechBubbleEvent = {
+  id?: string;
+  sourceRef: WorldEntityRef;
+  speaker?: string | null;
+  text: string;
+  kind?: SpeechBubbleKind;
+  ttlMs?: number;
+};
+
+export type ReputationMap = Record<string, number>;
+
+export type SocialIncidentType = "crime" | "heroic" | "quest" | "recruitment" | "world_event";
+
+export type SocialIncident = {
+  id: string;
+  type: SocialIncidentType;
+  faction: string;
+  zone: string;
+  actorId?: string | null;
+  summary: string;
+  severity: number;
+  createdTurn: number;
+  expiresAfterTurn?: number | null;
+  permanent?: boolean;
+};
+
+export type ActiveBounty = {
+  id: string;
+  faction: string;
+  zone: string;
+  reason: string;
+  level: number;
+  active: boolean;
+  createdTurn: number;
+};
+
+export type FollowerState = {
+  actorId: string;
+  role: string;
+  loyalty: number;
+  morale: number;
+  order: FollowerOrder;
+  recruitedTurn: number;
+};
+
+export type WorldEventDirectorState = {
+  actionsUntilNextEvent: number;
+  lastEventTurn: number;
+  eventCounter: number;
+};
+
+export type PlayerInteractionRequest = {
+  type: InteractionMode;
+  actionText?: string;
+  targetRef?: WorldEntityRef | null;
+  primaryTargetRef?: WorldEntityRef | null;
+  secondaryTargetRef?: WorldEntityRef | null;
+  targetTile?: WorldPoint | null;
+  previewPath?: WorldPoint[] | null;
+  desiredItemName?: string | null;
+  instrumentItemId?: string | null;
+  stance?: "neutral" | "friendly" | "hostile" | "furtive";
+  freeText?: string;
+  source?: "keyboard" | "mouse" | "text";
+  repeatSignature?: string | null;
+  showContextMenu?: boolean;
+  askInfo?: boolean;
+};
+
+export type InteractionTargetInfo = {
+  ref: WorldEntityRef;
+  kind: WorldEntityKind;
+  name: string;
+  x: number;
+  y: number;
+  distance: number;
+  ownerRef?: WorldEntityRef | null;
+  visibleItems?: string[];
+  equippedItems?: string[];
+  accessPolicy?: EntityAccessPolicy | null;
+  faction?: string | null;
+};
 
 export type PatrolPath = {
   axis: "x" | "y";
@@ -52,6 +171,46 @@ export type WorldActor = {
   face: string;
   dialogue: string[];
   patrol?: PatrolPath;
+  role?: string;
+  profession?: string;
+  faction?: string;
+  personality?: string;
+  loreSummary?: string;
+  mood?: string;
+  disposition?: string;
+  homeStructureId?: string | null;
+  workStructureId?: string | null;
+  strength?: number;
+  speed?: number;
+  willpower?: number;
+  magic?: number;
+  aura?: number;
+  defense?: number;
+  precision?: number;
+  evasion?: number;
+  perception?: number;
+  discretion?: number;
+  chance?: number;
+  initiative?: number;
+  charisma?: number;
+  endurance?: number;
+  resonance?: number;
+  combatLevel?: number;
+  stress?: number;
+  morale?: number;
+  loyalty?: number;
+  obedience?: number;
+  bravery?: number;
+  alertness?: number;
+  aggroRange?: number;
+  sightRange?: number;
+  hearingRange?: number;
+  recruitmentEligible?: boolean;
+  recruitmentMode?: RecruitmentMode;
+  leaderId?: string | null;
+  followerOrder?: FollowerOrder | null;
+  memoryTags?: string[];
+  persistentHostile?: boolean;
 };
 
 export type InventoryItem = {
@@ -62,6 +221,126 @@ export type InventoryItem = {
   icon: string;
   sprite: string | null;
   emoji: string;
+};
+
+export type EquipmentSlot =
+  | "weapon"
+  | "offhand"
+  | "head"
+  | "body"
+  | "accessory"
+  | "tool";
+
+export type EntityInventoryItem = InventoryItem & {
+  ownerRef?: WorldEntityRef | null;
+  equippedSlot?: EquipmentSlot | null;
+  tags?: string[];
+};
+
+export type EntityAccessPolicy = {
+  locked?: boolean;
+  sealed?: boolean;
+  requiresKeyItemId?: string | null;
+  crimeFaction?: string | null;
+  crimeZone?: string | null;
+  theftSeverity?: number;
+};
+
+export type WorldEntityState = {
+  ref: WorldEntityRef;
+  ownerRef?: WorldEntityRef | null;
+  faction?: string | null;
+  inventory: EntityInventoryItem[];
+  equipment: Partial<Record<EquipmentSlot, string>>;
+  tags: string[];
+  states: string[];
+  witnessRange?: number;
+  accessPolicy?: EntityAccessPolicy | null;
+};
+
+export type ActionVerb =
+  | "move"
+  | "talk"
+  | "inspect"
+  | "attack"
+  | "recruit"
+  | "bribe"
+  | "disarm"
+  | "threaten"
+  | "block"
+  | "trap"
+  | "buy"
+  | "sell"
+  | "negotiate"
+  | "steal"
+  | "loot"
+  | "take"
+  | "open"
+  | "burn"
+  | "destroy"
+  | "dig"
+  | "use"
+  | "rest"
+  | "unknown";
+
+export type ActionDraft = {
+  verb: ActionVerb;
+  primaryTargetRef?: WorldEntityRef | null;
+  secondaryTargetRef?: WorldEntityRef | null;
+  desiredItemName?: string | null;
+  instrumentItemId?: string | null;
+  stance?: "neutral" | "friendly" | "hostile" | "furtive";
+  requiresApproach?: boolean;
+  freeText: string;
+};
+
+export type WorldOp =
+  | {
+      type: "move_path";
+      path: WorldPoint[];
+      targetRef?: WorldEntityRef | null;
+    }
+  | {
+      type: "transfer_item";
+      fromRef?: WorldEntityRef | null;
+      toRef: WorldEntityRef;
+      itemName: string;
+      qty: number;
+      createIfMissing?: boolean;
+    }
+  | {
+      type: "adjust_player_gold";
+      delta: number;
+      reason?: string | null;
+    }
+  | {
+      type: "set_shop_discount";
+      targetRef: WorldEntityRef;
+      percent: number;
+    }
+  | {
+      type: "record_incident";
+      incident: Omit<SocialIncident, "id" | "createdTurn"> & { id?: string; createdTurn?: number };
+    }
+  | {
+      type: "add_speech_bubble";
+      bubble: SpeechBubbleEvent;
+    }
+  | {
+      type: "set_entity_state";
+      ref: WorldEntityRef;
+      tags?: string[];
+      states?: string[];
+    };
+
+export type ResolutionPlan = {
+  draft: ActionDraft;
+  worldOps: WorldOp[];
+  narrative: string;
+  storyLine?: string;
+  diceRoll: number | null;
+  npcSpeech?: string | null;
+  compatOutcome?: Partial<SoloOutcome>;
 };
 
 export type Quest = {
@@ -87,6 +366,20 @@ export type PlayerState = {
   maxLives: number;
   gold: number;
   strength: number;
+  speed: number;
+  willpower: number;
+  magic: number;
+  aura: number;
+  defense: number;
+  precision: number;
+  evasion: number;
+  perception: number;
+  discretion: number;
+  chance: number;
+  initiative: number;
+  charisma: number;
+  endurance: number;
+  resonance: number;
   stress: number;
   x: number;
   y: number;
@@ -99,9 +392,12 @@ export type PlayerState = {
   equippedItemName: string | null;
   equippedItemSprite: string | null;
   inventory: InventoryItem[];
+  reputationTitle?: string | null;
+  shopDiscountPercent?: number;
 };
 
 export type SoloGameState = {
+  serverSessionId?: string | null;
   status: "playing" | "defeat" | "victory";
   turn: number;
   worldWidth: number;
@@ -114,6 +410,14 @@ export type SoloGameState = {
   revealedChunks: string[];
   lastAction: string;
   lastNarration: string;
+  factionReputations: ReputationMap;
+  zoneReputations: ReputationMap;
+  incidents: SocialIncident[];
+  bounties: ActiveBounty[];
+  followers: FollowerState[];
+  worldDirector: WorldEventDirectorState;
+  recentActionSignatures: string[];
+  entityStates: Record<WorldEntityRef, WorldEntityState>;
 };
 
 export type SoloActionContext = {
@@ -125,6 +429,20 @@ export type SoloActionContext = {
   lives: number;
   gold: number;
   strength: number;
+  speed: number;
+  willpower: number;
+  magic: number;
+  aura: number;
+  defense: number;
+  precision: number;
+  evasion: number;
+  perception: number;
+  discretion: number;
+  chance: number;
+  initiative: number;
+  charisma: number;
+  endurance: number;
+  resonance: number;
   stress: number;
   powerText: string;
   powerRoll: number;
@@ -148,6 +466,11 @@ export type SoloActionContext = {
   }>;
   quests: Array<{ id: string; title: string; done: boolean; progress: number; target: number }>;
   inventory: Array<{ id: string; name: string; qty: number }>;
+  target?: InteractionTargetInfo | null;
+  factionReputations: ReputationMap;
+  zoneReputations: ReputationMap;
+  followers: FollowerState[];
+  recentActionSignatures: string[];
   recentLog: string[];
 };
 
@@ -170,12 +493,40 @@ export type SpawnActor = {
   dy: number;
   sprite: string;
   face: string;
+  faction?: string;
+  role?: string;
+  profession?: string;
+  personality?: string;
+  loreSummary?: string;
+  recruitmentEligible?: boolean;
+  recruitmentMode?: RecruitmentMode;
+  strength?: number;
+  speed?: number;
+  willpower?: number;
+  magic?: number;
+  aura?: number;
+  defense?: number;
+  precision?: number;
+  evasion?: number;
+  perception?: number;
+  discretion?: number;
+  chance?: number;
+  initiative?: number;
+  charisma?: number;
+  endurance?: number;
+  resonance?: number;
+  combatLevel?: number;
 };
 
 export type SoloOutcome = {
   narrative: string;
   storyLine?: string;
   diceRoll: number | null;
+  actionDraft?: ActionDraft | null;
+  worldOps?: WorldOp[] | null;
+  targetRef?: WorldEntityRef | null;
+  targetTile?: WorldPoint | null;
+  movePath?: WorldPoint[] | null;
   moveBy?: { dx: number; dy: number } | null;
   moveToPoi?: Exclude<PoiType, null> | null;
   moveToPoiSteps?: number;
@@ -187,14 +538,26 @@ export type SoloOutcome = {
   goldDelta?: number;
   requestQuest?: boolean;
   buyItemName?: string | null;
+  sellItemName?: string | null;
+  sellItemQty?: number | null;
+  setShopDiscountPercent?: number | null;
   addItemName?: string | null;
   destroyTarget?: { dx: number; dy: number } | null;
   attackNearestHostile?: boolean;
+  attackActorId?: string | null;
   attackPower?: number;
   talkToNearestNpc?: boolean;
+  talkToActorId?: string | null;
   npcSpeech?: string | null;
+  recruitActorId?: string | null;
+  recruitMode?: RecruitmentMode | null;
   terrainChanges?: TerrainChange[];
   spawnActors?: SpawnActor[];
+  speechBubbles?: SpeechBubbleEvent[];
+  factionReputationDelta?: ReputationMap;
+  zoneReputationDelta?: ReputationMap;
+  recordIncidents?: Array<Omit<SocialIncident, "id" | "createdTurn"> & { id?: string; createdTurn?: number }>;
+  setFollowerOrder?: { actorId: string; order: FollowerOrder } | null;
   worldEvent?: string | null;
   objectivePatch?: string | null;
   completeObjective?: boolean;
@@ -203,4 +566,6 @@ export type SoloOutcome = {
 export type SoloResolveRequest = {
   actionText: string;
   context: SoloActionContext;
+  interaction?: PlayerInteractionRequest | null;
+  state?: SoloGameState;
 };

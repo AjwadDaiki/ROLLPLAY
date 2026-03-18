@@ -1,5 +1,14 @@
 import { resolveCharacter } from "./characters";
-import type { InventoryItem, PoiType, SoloGameState, TerrainType, Tile, TileProp, WorldActor } from "./types";
+import { resolveItemAsset } from "./assets";
+import {
+  createVillageDecors,
+  createVillagePoiNodes,
+  createVillageStructureEntities,
+  VILLAGE_ACTOR_ANCHORS,
+} from "./mapBlueprints";
+import { hydrateSoloState } from "./runtime";
+import { SHOP_CATALOG } from "./shop";
+import type { EntityInventoryItem, InventoryItem, PoiType, SoloGameState, TerrainType, Tile, TileProp, WorldActor, WorldEntityRef, WorldEntityState } from "./types";
 import { CHUNK_SIZE, WORLD_HEIGHT, WORLD_WIDTH, WORLD_SCREENS_X, WORLD_SCREENS_Y } from "./types";
 
 const CHARACTER_BASE =
@@ -14,11 +23,16 @@ export type SceneDecorKind =
   | "house_a"
   | "house_b"
   | "house_c"
+  | "house_d"
   | "fence_h"
   | "fence_v"
   | "ruin_a"
   | "ruin_b"
   | "palm_cluster"
+  | "forest_grove_a"
+  | "forest_grove_b"
+  | "stone_cluster"
+  | "citadel_tower"
   | "well"
   | "guild_flag"
   | "shop_stall"
@@ -37,39 +51,215 @@ export type SceneDecor = {
   kind: SceneDecorKind;
 };
 
-export const WORLD_LAYOUT_VERSION = "solo_map_v10";
+export type PoiNode = {
+  id: string;
+  poi: Exclude<PoiType, null>;
+  x: number;
+  y: number;
+  anchorX: number;
+  anchorY: number;
+  label: string | null;
+  showLabel: boolean;
+  protectPath: boolean;
+  highlight: {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+  };
+};
+
+type ActorAnchor = {
+  actorId: string;
+  x: number;
+  y: number;
+};
+
+export type MapStructure = {
+  id: string;
+  category: "service_building" | "house" | "landmark" | "gate";
+  biome: TerrainType;
+  decorKind: SceneDecorKind;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  anchorX: number;
+  anchorY: number;
+  serviceX: number | null;
+  serviceY: number | null;
+  poi: Exclude<PoiType, null> | null;
+  label: string | null;
+  showLabel: boolean;
+  artProfileId: string;
+};
+
+export const WORLD_LAYOUT_VERSION = "solo_map_v14";
 
 type CanonicalPoi = Exclude<PoiType, null>;
 type PoiPlacement = { poi: CanonicalPoi; x: number; y: number; anchorX: number; anchorY: number };
 
-const CANONICAL_POI_PLACEMENTS: PoiPlacement[] = [
-  { poi: "camp", x: 24, y: 26, anchorX: 24, anchorY: 25.7 },
-  { poi: "guild", x: 18, y: 23, anchorX: 18.2, anchorY: 22.2 },
-  { poi: "inn", x: 24, y: 23, anchorX: 24.2, anchorY: 22.2 },
-  { poi: "shop", x: 27, y: 23, anchorX: 27.2, anchorY: 22.2 },
-  { poi: "house", x: 18, y: 22, anchorX: 24.2, anchorY: 17.2 },
-  { poi: "house", x: 24, y: 22, anchorX: 24.2, anchorY: 17.2 },
-  { poi: "house", x: 30, y: 22, anchorX: 24.2, anchorY: 17.2 },
-  { poi: "dungeon_gate", x: 24, y: 40, anchorX: 24, anchorY: 39.25 },
-  { poi: "boss_gate", x: 40, y: 40, anchorX: 40, anchorY: 39.25 },
+const POI_NODES: PoiNode[] = [
+  ...createVillagePoiNodes(),
+  {
+    id: "dungeon_gate",
+    poi: "dungeon_gate",
+    x: 24,
+    y: 40,
+    anchorX: 24,
+    anchorY: 38.35,
+    label: "Donjon",
+    showLabel: true,
+    protectPath: true,
+    highlight: { x: 23, y: 39, w: 2, h: 2 },
+  },
+  {
+    id: "boss_gate",
+    poi: "boss_gate",
+    x: 40,
+    y: 40,
+    anchorX: 40.5,
+    anchorY: 38.35,
+    label: "Citadelle",
+    showLabel: true,
+    protectPath: true,
+    highlight: { x: 40, y: 40, w: 2, h: 2 },
+  },
 ];
 
-const PROTECTED_PATH_TILES: Array<{ x: number; y: number }> = [
-  { x: 18, y: 23 },
-  { x: 24, y: 23 },
-  { x: 27, y: 23 },
-  { x: 24, y: 26 },
+const CANONICAL_POI_PLACEMENTS: PoiPlacement[] = POI_NODES.map((entry) => ({
+  poi: entry.poi,
+  x: entry.x,
+  y: entry.y,
+  anchorX: entry.anchorX,
+  anchorY: entry.anchorY,
+}));
+
+const PROTECTED_PATH_TILES: Array<{ x: number; y: number; terrain: TerrainType }> = POI_NODES.filter((entry) => entry.protectPath).map((entry) => ({
+  x: entry.x,
+  y: entry.y,
+  terrain: entry.poi === "boss_gate" ? "boss" : "road",
+}));
+
+const LANDMARK_STRUCTURES: MapStructure[] = [
+  {
+    id: "mesa_ruin",
+    category: "landmark",
+    biome: "desert",
+    decorKind: "ruin_a",
+    x: 35,
+    y: 4,
+    w: 4,
+    h: 4,
+    anchorX: 37,
+    anchorY: 4.8,
+    serviceX: null,
+    serviceY: null,
+    poi: null,
+    label: "Ruines",
+    showLabel: false,
+    artProfileId: "ruin_a",
+  },
+  {
+    id: "mesa_oasis",
+    category: "landmark",
+    biome: "desert",
+    decorKind: "palm_cluster",
+    x: 40,
+    y: 7,
+    w: 4,
+    h: 4,
+    anchorX: 42,
+    anchorY: 7.2,
+    serviceX: null,
+    serviceY: null,
+    poi: null,
+    label: "Oasis",
+    showLabel: false,
+    artProfileId: "palm_cluster",
+  },
+  {
+    id: "dungeon_gate_structure",
+    category: "gate",
+    biome: "dungeon",
+    decorKind: "dungeon_gate",
+    x: 23,
+    y: 39,
+    w: 2,
+    h: 2,
+    anchorX: 24,
+    anchorY: 38.35,
+    serviceX: 24,
+    serviceY: 40,
+    poi: "dungeon_gate",
+    label: "Donjon",
+    showLabel: true,
+    artProfileId: "dungeon_gate",
+  },
+  {
+    id: "boss_gate_structure",
+    category: "gate",
+    biome: "boss",
+    decorKind: "boss_gate",
+    x: 40,
+    y: 40,
+    w: 2,
+    h: 2,
+    anchorX: 41,
+    anchorY: 38.35,
+    serviceX: 40,
+    serviceY: 40,
+    poi: "boss_gate",
+    label: "Citadelle",
+    showLabel: true,
+    artProfileId: "boss_gate",
+  },
+];
+
+const SCENERY_DECORS: SceneDecor[] = [
+  { id: "forest_grove_ancient_a", screenX: 0, screenY: 0, x: 2, y: 2, w: 4, h: 4, kind: "forest_grove_a" },
+  { id: "forest_grove_ancient_b", screenX: 0, screenY: 0, x: 9, y: 4, w: 4, h: 4, kind: "forest_grove_b" },
+  { id: "forest_grove_brume_a", screenX: 0, screenY: 1, x: 2, y: 18, w: 4, h: 4, kind: "forest_grove_a" },
+  { id: "forest_grove_brume_b", screenX: 0, screenY: 1, x: 9, y: 26, w: 4, h: 4, kind: "forest_grove_b" },
+  { id: "forest_grove_lisiere_a", screenX: 0, screenY: 2, x: 2, y: 34, w: 4, h: 4, kind: "forest_grove_a" },
+  { id: "highland_grove_a", screenX: 1, screenY: 0, x: 18, y: 4, w: 4, h: 4, kind: "forest_grove_b" },
+  { id: "highland_grove_b", screenX: 1, screenY: 0, x: 27, y: 8, w: 4, h: 4, kind: "forest_grove_a" },
+  { id: "dunes_ruin_secondary", screenX: 2, screenY: 1, x: 34, y: 18, w: 4, h: 4, kind: "ruin_b" },
+  { id: "dunes_stone_outcrop", screenX: 2, screenY: 1, x: 41, y: 34, w: 3, h: 3, kind: "stone_cluster" },
+  { id: "dungeon_cluster_west", screenX: 1, screenY: 2, x: 18, y: 35, w: 4, h: 4, kind: "stone_cluster" },
+  { id: "dungeon_cluster_south", screenX: 1, screenY: 2, x: 27, y: 41, w: 4, h: 4, kind: "stone_cluster" },
+  { id: "citadel_tower_nw", screenX: 2, screenY: 2, x: 35, y: 34, w: 2, h: 2, kind: "citadel_tower" },
+  { id: "citadel_tower_ne", screenX: 2, screenY: 2, x: 44, y: 34, w: 2, h: 2, kind: "citadel_tower" },
+  { id: "citadel_tower_sw", screenX: 2, screenY: 2, x: 35, y: 43, w: 2, h: 2, kind: "citadel_tower" },
+  { id: "citadel_tower_se", screenX: 2, screenY: 2, x: 44, y: 43, w: 2, h: 2, kind: "citadel_tower" },
+  { id: "citadel_cluster_west", screenX: 2, screenY: 2, x: 36, y: 38, w: 4, h: 4, kind: "stone_cluster" },
+];
+
+const MAP_STRUCTURES: MapStructure[] = [
+  ...createVillageStructureEntities(),
+  ...LANDMARK_STRUCTURES,
 ];
 
 const DECORS: SceneDecor[] = [
-  { id: "v_house_a", screenX: 1, screenY: 1, x: 17, y: 17, w: 4, h: 4, kind: "house_a" },
-  { id: "v_house_b", screenX: 1, screenY: 1, x: 23, y: 17, w: 4, h: 4, kind: "house_c" },
-  { id: "v_house_c", screenX: 1, screenY: 1, x: 28, y: 17, w: 4, h: 4, kind: "house_a" },
-  { id: "v_guild_flag", screenX: 1, screenY: 1, x: 18, y: 22, w: 1, h: 1, kind: "guild_flag" },
-  { id: "v_inn_sign", screenX: 1, screenY: 1, x: 24, y: 22, w: 1, h: 1, kind: "inn_sign" },
-  { id: "v_shop_stall", screenX: 1, screenY: 1, x: 26, y: 22, w: 2, h: 1, kind: "shop_stall" },
-  { id: "dg_gate", screenX: 1, screenY: 2, x: 23, y: 39, w: 2, h: 2, kind: "dungeon_gate" },
-  { id: "boss_gate", screenX: 2, screenY: 2, x: 40, y: 40, w: 2, h: 2, kind: "boss_gate" },
+  ...createVillageDecors(),
+  ...SCENERY_DECORS,
+  ...LANDMARK_STRUCTURES.map((structure) => ({
+    id: structure.id,
+    screenX: Math.floor(structure.x / CHUNK_SIZE),
+    screenY: Math.floor(structure.y / CHUNK_SIZE),
+    x: structure.x,
+    y: structure.y,
+    w: structure.w,
+    h: structure.h,
+    kind: structure.decorKind,
+  })),
+];
+
+const ACTOR_ANCHORS: ActorAnchor[] = [
+  ...VILLAGE_ACTOR_ANCHORS,
+  { actorId: "animal_dog_forest", x: 10, y: 21 },
+  { actorId: "animal_chicken_desert", x: 39, y: 21 },
+  { actorId: "animal_frog_dungeon", x: 22, y: 36 },
 ];
 
 const MONSTER_TEMPLATES: Array<{
@@ -114,6 +304,116 @@ const MONSTER_TEMPLATES: Array<{
   },
 ];
 
+function createEntityItem(name: string, qty = 1, ownerRef?: WorldEntityRef | null): EntityInventoryItem {
+  const asset = resolveItemAsset(name);
+  return {
+    id: ownerRef ? `${ownerRef}_${asset.id}` : asset.id,
+    itemId: asset.itemId,
+    name: asset.name,
+    qty,
+    icon: asset.icon,
+    sprite: asset.sprite,
+    emoji: asset.emoji,
+    ownerRef: ownerRef ?? null,
+    equippedSlot: null,
+    tags: [],
+  };
+}
+
+function createInitialEntityStates(actors: WorldActor[]): Record<WorldEntityRef, WorldEntityState> {
+  const entityStates: Record<WorldEntityRef, WorldEntityState> = {};
+
+  for (const structure of getMapStructures()) {
+    const ref = `structure:${structure.id}`;
+    const base: WorldEntityState = {
+      ref,
+      ownerRef: null,
+      faction: structure.poi === "guild" ? "guild" : structure.poi === "shop" || structure.poi === "inn" || structure.poi === "house" ? "village" : null,
+      inventory: [],
+      equipment: {},
+      tags: [structure.category, structure.biome, structure.poi ?? "structure"],
+      states: [],
+      witnessRange: structure.poi === "shop" || structure.poi === "guild" || structure.poi === "inn" ? 6 : 3,
+      accessPolicy: structure.poi
+        ? {
+            locked: false,
+            sealed: false,
+            requiresKeyItemId: null,
+            crimeFaction: structure.poi === "guild" ? "guild" : "village",
+            crimeZone: "village_camp",
+            theftSeverity: structure.poi === "shop" ? 6 : 3,
+          }
+        : null,
+    };
+
+    if (structure.id === "shop") {
+      base.inventory = SHOP_CATALOG.map((entry) => createEntityItem(entry.name, 6, ref));
+      base.tags.push("merchant_stock");
+    } else if (structure.id === "inn") {
+      base.inventory = [createEntityItem("Ration", 4, ref), createEntityItem("Potion de soin", 1, ref)];
+      base.tags.push("hospitality");
+    } else if (structure.id === "guild") {
+      base.inventory = [createEntityItem("Registre de quetes", 1, ref)];
+      base.tags.push("quest_hub");
+    }
+
+    entityStates[ref] = base;
+  }
+
+  for (const actor of actors) {
+    const ref = `actor:${actor.id}`;
+    const state: WorldEntityState = {
+      ref,
+      ownerRef: actor.workStructureId ? `structure:${actor.workStructureId}` : actor.homeStructureId ? `structure:${actor.homeStructureId}` : null,
+      faction: actor.faction ?? null,
+      inventory: [],
+      equipment: {},
+      tags: [actor.kind, actor.role ?? actor.profession ?? actor.kind],
+      states: actor.alive ? ["alive"] : ["dead"],
+      witnessRange: actor.kind === "npc" ? 5 : actor.kind === "boss" ? 8 : 3,
+      accessPolicy: actor.kind === "npc"
+        ? {
+            locked: false,
+            sealed: false,
+            requiresKeyItemId: null,
+            crimeFaction: actor.faction ?? "village",
+            crimeZone: actor.workStructureId === "guild" || actor.homeStructureId ? "village_camp" : "wilds",
+            theftSeverity: actor.id === "npc_guard_road" ? 7 : 4,
+          }
+        : null,
+    };
+
+    if (actor.id === "npc_shopkeeper") {
+      state.inventory = [createEntityItem("Bourse de marchand", 1, ref)];
+      state.equipment.weapon = "ledger";
+    } else if (actor.id === "npc_guard_road") {
+      const spear = createEntityItem("Lance de garde", 1, ref);
+      spear.equippedSlot = "weapon";
+      state.inventory = [spear];
+      state.equipment.weapon = spear.id;
+    } else if (actor.kind === "boss") {
+      const sword = createEntityItem("Epee du demon", 1, ref);
+      sword.equippedSlot = "weapon";
+      sword.tags = ["legendary", "boss_item"];
+      state.inventory = [sword, createEntityItem("Couronne infernale", 1, ref)];
+      state.equipment.weapon = sword.id;
+      state.tags.push("boss");
+    } else if (actor.kind === "monster") {
+      state.inventory = [createEntityItem("Butin monstrueux", 1, ref)];
+    } else if (actor.kind === "animal") {
+      state.inventory = [];
+    } else if (actor.id === "npc_innkeeper") {
+      state.inventory = [createEntityItem("Cle de chambre", 1, ref)];
+    } else if (actor.id === "npc_guild_master") {
+      state.inventory = [createEntityItem("Sceau de guilde", 1, ref)];
+    }
+
+    entityStates[ref] = state;
+  }
+
+  return entityStates;
+}
+
 export function createInitialSoloState(input: {
   playerName: string;
   powerText: string;
@@ -124,6 +424,7 @@ export function createInitialSoloState(input: {
   const character = resolveCharacter(input.characterId);
   const tiles = createTiles();
   const actors = createActors();
+  const entityStates = createInitialEntityStates(actors);
 
   const startX = 24;
   const startY = 25;
@@ -142,6 +443,7 @@ export function createInitialSoloState(input: {
   ];
 
   const state: SoloGameState = {
+    serverSessionId: null,
     status: "playing",
     turn: 1,
     worldWidth: WORLD_WIDTH,
@@ -197,6 +499,20 @@ export function createInitialSoloState(input: {
       maxLives: 3,
       gold: 10,
       strength: 5,
+      speed: 5,
+      willpower: 5,
+      magic: 4,
+      aura: 5,
+      defense: 4,
+      precision: 5,
+      evasion: 4,
+      perception: 5,
+      discretion: 4,
+      chance: 5,
+      initiative: 5,
+      charisma: 5,
+      endurance: 5,
+      resonance: 4,
       stress: 0,
       x: startX,
       y: startY,
@@ -209,14 +525,41 @@ export function createInitialSoloState(input: {
       equippedItemName: null,
       equippedItemSprite: null,
       inventory: playerInventory,
+      reputationTitle: null,
+      shopDiscountPercent: 0,
     },
     revealedChunks: [chunkKey(startChunk.cx, startChunk.cy)],
     lastAction: "Debut de partie",
     lastNarration: "Tu arrives au camp du village central.",
+    factionReputations: {
+      village: 0,
+      guild: 0,
+      militia: 0,
+      monsters: 0,
+      demon_army: 0,
+      wildlife: 0,
+    },
+    zoneReputations: {
+      "1_1": 0,
+      "0_1": 0,
+      "2_1": 0,
+      "1_2": 0,
+      "2_2": 0,
+    },
+    incidents: [],
+    bounties: [],
+    followers: [],
+    worldDirector: {
+      actionsUntilNextEvent: 8,
+      lastEventTurn: 0,
+      eventCounter: 0,
+    },
+    recentActionSignatures: [],
+    entityStates,
   };
 
   enforceWorldCoherence(state);
-  return state;
+  return hydrateSoloState(state);
 }
 
 export function idxOf(x: number, y: number): number {
@@ -332,18 +675,127 @@ export function getDecorsForChunk(cx: number, cy: number): SceneDecor[] {
   return DECORS.filter((entry) => entry.screenX === cx && entry.screenY === cy);
 }
 
+export function getPoiNodesForChunk(cx: number, cy: number): PoiNode[] {
+  return POI_NODES.filter((entry) => {
+    const chunk = chunkOf(entry.x, entry.y);
+    return chunk.cx === cx && chunk.cy === cy;
+  });
+}
+
+export function getAllPoiNodes(): PoiNode[] {
+  return POI_NODES.map((entry) => ({
+    ...entry,
+    highlight: { ...entry.highlight },
+  }));
+}
+
+export function getActorAnchors(): Array<{ actorId: string; x: number; y: number }> {
+  return ACTOR_ANCHORS.map((entry) => ({ ...entry }));
+}
+
+export function getMapStructures(): MapStructure[] {
+  return MAP_STRUCTURES.map((structure) => ({
+    ...structure,
+  }));
+}
+
 export function getPoiAnchor(
   cx: number,
   cy: number,
   poi: Exclude<PoiType, null>
 ): { x: number; y: number } | null {
-  const found = CANONICAL_POI_PLACEMENTS.find((entry) => {
+  const found = POI_NODES.find((entry) => {
     if (entry.poi !== poi) return false;
     const chunk = chunkOf(entry.x, entry.y);
     return chunk.cx === cx && chunk.cy === cy;
   });
   if (!found) return null;
   return { x: found.anchorX, y: found.anchorY };
+}
+
+function getActorAnchor(actorId: string): ActorAnchor | null {
+  return ACTOR_ANCHORS.find((entry) => entry.actorId === actorId) ?? null;
+}
+
+function applyVillageGrounding(tiles: Tile[]): void {
+  paintRect(tiles, 16, 16, 16, 16, {
+    terrain: "village",
+    blocked: false,
+    destructible: false,
+    prop: "none",
+  });
+  paintRect(tiles, 19, 21, 10, 6, {
+    terrain: "road",
+    blocked: false,
+    destructible: false,
+    prop: "none",
+  });
+  paintRect(tiles, 17, 21, 2, 2, {
+    terrain: "road",
+    blocked: false,
+    destructible: false,
+    prop: "none",
+  });
+  paintRect(tiles, 23, 21, 2, 2, {
+    terrain: "road",
+    blocked: false,
+    destructible: false,
+    prop: "none",
+  });
+  paintRect(tiles, 28, 21, 2, 2, {
+    terrain: "road",
+    blocked: false,
+    destructible: false,
+    prop: "none",
+  });
+  paintRect(tiles, 23, 25, 2, 5, {
+    terrain: "road",
+    blocked: false,
+    destructible: false,
+    prop: "none",
+  });
+  paintRect(tiles, 19, 28, 2, 2, {
+    terrain: "road",
+    blocked: false,
+    destructible: false,
+    prop: "none",
+  });
+  paintRect(tiles, 27, 28, 2, 2, {
+    terrain: "road",
+    blocked: false,
+    destructible: false,
+    prop: "none",
+  });
+  paintRect(tiles, 22, 22, 4, 3, {
+    terrain: "village",
+    blocked: false,
+    destructible: false,
+    prop: "none",
+  });
+  paintRect(tiles, 21, 27, 6, 2, {
+    terrain: "village",
+    blocked: false,
+    destructible: false,
+    prop: "none",
+  });
+}
+
+function applyCanonicalGroundPatches(tiles: Tile[]): void {
+  applyVillageGrounding(tiles);
+
+  // Gate approaches need stable, clean interaction tiles.
+  paintRect(tiles, 23, 39, 2, 2, {
+    terrain: "road",
+    blocked: false,
+    destructible: false,
+    prop: "none",
+  });
+  paintRect(tiles, 40, 40, 2, 2, {
+    terrain: "boss",
+    blocked: false,
+    destructible: false,
+    prop: "none",
+  });
 }
 
 function createTiles(): Tile[] {
@@ -374,11 +826,7 @@ function createTiles(): Tile[] {
   // Core roads: east-west main route, then north-south village spine.
   paintRoadBandHorizontal(tiles, 23, 23, 1, WORLD_WIDTH - 2);
   paintRoadBandVertical(tiles, 23, 23, 8, WORLD_HEIGHT - 2);
-
-  // Village plaza to break monotony and keep readable POI flow.
-  paintRect(tiles, 20, 22, 10, 6, { terrain: "road", blocked: false, destructible: false });
-  paintRect(tiles, 16, 16, 16, 7, { terrain: "village", blocked: false, destructible: false });
-  paintRect(tiles, 20, 25, 8, 4, { terrain: "village", blocked: false, destructible: false });
+  applyCanonicalGroundPatches(tiles);
 
   // Water boundaries.
   for (let x = 0; x < WORLD_WIDTH; x += 1) {
@@ -397,6 +845,7 @@ function createTiles(): Tile[] {
 
   // Handcrafted resources (no random placement).
   addForestZoneProps(tiles);
+  addHighlandZoneProps(tiles);
   addDesertZoneProps(tiles);
   addDungeonZoneProps(tiles);
   applyDecorCollisionFootprints(tiles);
@@ -412,13 +861,15 @@ function createTiles(): Tile[] {
 }
 
 function createActors(): WorldActor[] {
+  const actorX = (actorId: string, fallbackX: number) => getActorAnchor(actorId)?.x ?? fallbackX;
+  const actorY = (actorId: string, fallbackY: number) => getActorAnchor(actorId)?.y ?? fallbackY;
   const actors: WorldActor[] = [
     {
       id: "npc_guild_master",
       name: "Maitre de Guilde",
       kind: "npc",
-      x: 18,
-      y: 24,
+      x: actorX("npc_guild_master", 17),
+      y: actorY("npc_guild_master", 22),
       hp: 18,
       maxHp: 18,
       hostile: false,
@@ -430,14 +881,22 @@ function createActors(): WorldActor[] {
         "Si tu veux du rang, prouve ta valeur dans le donjon.",
         "Les quetes de rang S ne sont pas pour les faibles.",
       ],
+      faction: "guild",
+      role: "maitre de guilde",
+      profession: "recruteur",
+      personality: "exigeant mais juste",
+      loreSummary: "Chef local de la guilde, il observe les nouveaux aventuriers avec attention.",
+      homeStructureId: "guild",
+      workStructureId: "guild",
+      recruitmentEligible: false,
       patrol: { axis: "y", range: 0.2, speed: 0.35, phase: 0.2 },
     },
     {
       id: "npc_shopkeeper",
       name: "Marchand",
       kind: "npc",
-      x: 27,
-      y: 24,
+      x: actorX("npc_shopkeeper", 28),
+      y: actorY("npc_shopkeeper", 22),
       hp: 14,
       maxHp: 14,
       hostile: false,
@@ -449,14 +908,22 @@ function createActors(): WorldActor[] {
         "Tu veux acheter ou vendre ?",
         "J ai recu des potions fraiches ce matin.",
       ],
+      faction: "village",
+      role: "marchand",
+      profession: "commercant",
+      personality: "roublard mais utile",
+      loreSummary: "Le marchand sait lire la tension du monde et ajuste ses affaires en consequence.",
+      homeStructureId: "shop",
+      workStructureId: "shop",
+      recruitmentEligible: false,
       patrol: { axis: "x", range: 0.2, speed: 0.3, phase: 0.7 },
     },
     {
       id: "npc_innkeeper",
       name: "Aubergiste",
       kind: "npc",
-      x: 24,
-      y: 24,
+      x: actorX("npc_innkeeper", 24),
+      y: actorY("npc_innkeeper", 22),
       hp: 14,
       maxHp: 14,
       hostile: false,
@@ -468,14 +935,22 @@ function createActors(): WorldActor[] {
         "Le demon rode pres des ruines du sud-est.",
         "Fais attention dans les dunes, aventurier.",
       ],
+      faction: "village",
+      role: "aubergiste",
+      profession: "tenanciere",
+      personality: "chaleureuse",
+      loreSummary: "Elle tient l auberge et collecte toutes les rumeurs importantes.",
+      homeStructureId: "inn",
+      workStructureId: "inn",
+      recruitmentEligible: false,
       patrol: { axis: "x", range: 0.2, speed: 0.3, phase: 1.1 },
     },
     {
       id: "npc_villager_square_a",
       name: "Villageois",
       kind: "npc",
-      x: 22,
-      y: 27,
+      x: actorX("npc_villager_square_a", 22),
+      y: actorY("npc_villager_square_a", 27),
       hp: 10,
       maxHp: 10,
       hostile: false,
@@ -486,14 +961,22 @@ function createActors(): WorldActor[] {
         "La place est plus sure depuis l arrivee des aventuriers.",
         "Tu as vu le chat du village ? Il traine partout.",
       ],
+      faction: "village",
+      role: "villageois",
+      profession: "artisan",
+      personality: "curieux",
+      loreSummary: "Un habitant du village central, plus bavard que prudent.",
+      homeStructureId: "house_south_west",
+      recruitmentEligible: true,
+      recruitmentMode: "contract",
       patrol: { axis: "x", range: 0.3, speed: 0.4, phase: 0.35 },
     },
     {
       id: "npc_villager_square_b",
       name: "Forgeron",
       kind: "npc",
-      x: 27,
-      y: 27,
+      x: actorX("npc_villager_square_b", 27),
+      y: actorY("npc_villager_square_b", 27),
       hp: 12,
       maxHp: 12,
       hostile: false,
@@ -504,14 +987,23 @@ function createActors(): WorldActor[] {
         "Les routes sont ouvertes, mais les dunes restent dangereuses.",
         "Si tu ramenes du minerai, je pourrai forger quelque chose.",
       ],
+      faction: "village",
+      role: "forgeron",
+      profession: "forgeron",
+      personality: "bourru et loyal",
+      loreSummary: "Le forgeron du village repare armes et outils contre du minerai ou de l or.",
+      homeStructureId: "house_south_east",
+      workStructureId: "house_south_east",
+      recruitmentEligible: true,
+      recruitmentMode: "contract",
       patrol: { axis: "y", range: 0.3, speed: 0.4, phase: 0.55 },
     },
     {
       id: "npc_guard_road",
       name: "Garde",
       kind: "npc",
-      x: 20,
-      y: 23,
+      x: actorX("npc_guard_road", 21),
+      y: actorY("npc_guard_road", 23),
       hp: 16,
       maxHp: 16,
       hostile: false,
@@ -522,14 +1014,21 @@ function createActors(): WorldActor[] {
         "La route principale est securisee.",
         "Ne t aventure pas au sud sans preparation.",
       ],
+      faction: "militia",
+      role: "garde",
+      profession: "milicien",
+      personality: "discipline",
+      loreSummary: "Le garde surveille l axe principal et reagit vite a la violence gratuite.",
+      workStructureId: "guild",
+      recruitmentEligible: false,
       patrol: { axis: "x", range: 0.3, speed: 0.35, phase: 1.4 },
     },
     {
       id: "npc_child_village",
       name: "Enfant",
       kind: "npc",
-      x: 26,
-      y: 26,
+      x: actorX("npc_child_village", 26),
+      y: actorY("npc_child_village", 26),
       hp: 6,
       maxHp: 6,
       hostile: false,
@@ -540,14 +1039,21 @@ function createActors(): WorldActor[] {
         "Un jour je serai aventurier comme toi !",
         "Le chat a vole un poisson au marche !",
       ],
+      faction: "village",
+      role: "enfant",
+      profession: "ecolier",
+      personality: "enthousiaste",
+      loreSummary: "Un enfant du village fascine par les aventuriers et les monstres.",
+      homeStructureId: "house_south_west",
+      recruitmentEligible: false,
       patrol: { axis: "x", range: 0.4, speed: 0.5, phase: 0.9 },
     },
     {
       id: "animal_cat_village",
       name: "Chat",
       kind: "animal",
-      x: 25,
-      y: 28,
+      x: actorX("animal_cat_village", 25),
+      y: actorY("animal_cat_village", 27),
       hp: 6,
       maxHp: 6,
       hostile: false,
@@ -555,14 +1061,21 @@ function createActors(): WorldActor[] {
       sprite: `${ANIMAL_BASE}/Cat/SpriteSheet.png`,
       face: `${ANIMAL_BASE}/Cat/Faceset.png`,
       dialogue: ["Miaou."],
+      faction: "wildlife",
+      role: "compagnon potentiel",
+      profession: "chat du village",
+      personality: "insaisissable",
+      loreSummary: "Le chat connait tous les recoins de la place et peut devenir un compagnon discret.",
+      recruitmentEligible: true,
+      recruitmentMode: "tame",
       patrol: { axis: "x", range: 0.4, speed: 0.5, phase: 0.4 },
     },
     {
       id: "animal_dog_forest",
       name: "Chien",
       kind: "animal",
-      x: 10,
-      y: 21,
+      x: actorX("animal_dog_forest", 10),
+      y: actorY("animal_dog_forest", 21),
       hp: 6,
       maxHp: 6,
       hostile: false,
@@ -570,14 +1083,21 @@ function createActors(): WorldActor[] {
       sprite: `${ANIMAL_BASE}/Dog/SpriteSheet.png`,
       face: `${ANIMAL_BASE}/Dog/Faceset.png`,
       dialogue: ["Wouf."],
+      faction: "wildlife",
+      role: "chien errant",
+      profession: "animal",
+      personality: "fidele",
+      loreSummary: "Un chien de foret qui peut apprendre a suivre un aventurier assez convaincant.",
+      recruitmentEligible: true,
+      recruitmentMode: "tame",
       patrol: { axis: "y", range: 0.4, speed: 0.45, phase: 2.2 },
     },
     {
       id: "animal_chicken_desert",
       name: "Poulet perdu",
       kind: "animal",
-      x: 39,
-      y: 21,
+      x: actorX("animal_chicken_desert", 39),
+      y: actorY("animal_chicken_desert", 21),
       hp: 5,
       maxHp: 5,
       hostile: false,
@@ -585,14 +1105,21 @@ function createActors(): WorldActor[] {
       sprite: `${ANIMAL_BASE}/Chicken/SpriteSheetWhite.png`,
       face: `${ANIMAL_BASE}/Chicken/FacesetWhite.png`,
       dialogue: ["Cot cot."],
+      faction: "wildlife",
+      role: "volaille egaree",
+      profession: "animal",
+      personality: "apeure",
+      loreSummary: "Le poulet s est egare loin du village et reagit a la moindre presence.",
+      recruitmentEligible: true,
+      recruitmentMode: "tame",
       patrol: { axis: "x", range: 0.4, speed: 0.5, phase: 1.8 },
     },
     {
       id: "animal_frog_dungeon",
       name: "Grenouille",
       kind: "animal",
-      x: 22,
-      y: 36,
+      x: actorX("animal_frog_dungeon", 22),
+      y: actorY("animal_frog_dungeon", 36),
       hp: 4,
       maxHp: 4,
       hostile: false,
@@ -600,6 +1127,13 @@ function createActors(): WorldActor[] {
       sprite: `${ANIMAL_BASE}/Frog/SpriteSheet.png`,
       face: `${ANIMAL_BASE}/Frog/Faceset.png`,
       dialogue: ["Croaa."],
+      faction: "wildlife",
+      role: "grenouille cavernicole",
+      profession: "animal",
+      personality: "placide",
+      loreSummary: "Une grenouille qui survit dans l humidite du donjon oublie.",
+      recruitmentEligible: true,
+      recruitmentMode: "tame",
       patrol: { axis: "y", range: 0.3, speed: 0.4, phase: 3.1 },
     },
   ];
@@ -635,6 +1169,13 @@ function spawnHostiles(): WorldActor[] {
       sprite: template.sprite,
       face: template.face,
       dialogue: template.kind === "boss" ? ["Je suis ton destin final."] : [],
+      faction: template.kind === "boss" ? "demon_army" : "monsters",
+      role: template.kind === "boss" ? "seigneur demon" : "predateur",
+      profession: template.kind === "boss" ? "souverain infernal" : "maraudeur",
+      personality: template.kind === "boss" ? "tyrannique" : "agressif",
+      loreSummary: template.kind === "boss" ? "Le coeur de la menace qui pese sur le monde." : "Une menace hostile liee au chaos de la region.",
+      recruitmentEligible: template.kind !== "boss",
+      recruitmentMode: "persuade",
       patrol:
         template.kind === "boss"
           ? { axis: "x", range: 0.3, speed: 0.35, phase: 0.9 }
@@ -651,9 +1192,18 @@ function spawnHostiles(): WorldActor[] {
 function setTile(tiles: Tile[], x: number, y: number, patch: Partial<Tile>): void {
   if (!inBounds(x, y)) return;
   const index = idxOf(x, y);
+  const current = tiles[index];
+  const persistentScarProps = new Set<TileProp>(["hole", "crater", "charred", "rubble"]);
+  const preserveGroundScar =
+    current &&
+    persistentScarProps.has(current.prop) &&
+    patch.prop === "none" &&
+    patch.blocked !== true &&
+    patch.terrain !== "water";
   tiles[index] = {
-    ...tiles[index],
+    ...current,
     ...patch,
+    prop: preserveGroundScar ? current.prop : patch.prop ?? current.prop,
   };
 }
 
@@ -744,12 +1294,12 @@ function placeProp(tiles: Tile[], x: number, y: number, prop: TileProp, blocks: 
 
 function addForestZoneProps(tiles: Tile[]): void {
   const forestInteriorTrees: Array<[number, number]> = [
-    [2, 2], [4, 2], [6, 3], [9, 2], [12, 3], [14, 4],
-    [3, 6], [5, 7], [8, 6], [11, 7], [14, 8],
-    [2, 18], [4, 19], [7, 18], [13, 19],
-    [3, 27], [6, 28], [10, 27], [14, 29],
-    [2, 34], [5, 35], [9, 34], [12, 36], [14, 37],
-    [3, 40], [6, 41], [10, 40], [13, 42],
+    [7, 2], [14, 4],
+    [6, 9], [13, 8],
+    [7, 18], [13, 19],
+    [6, 29], [14, 29],
+    [9, 34], [14, 37],
+    [6, 41], [13, 42],
   ];
   forestInteriorTrees.forEach(([x, y]) => placeProp(tiles, x, y, "tree", true));
 
@@ -764,19 +1314,36 @@ function addForestZoneProps(tiles: Tile[]): void {
   forestRocks.forEach(([x, y]) => placeProp(tiles, x, y, "rock", true));
 }
 
+function addHighlandZoneProps(tiles: Tile[]): void {
+  const highlandStumps: Array<[number, number]> = [
+    [19, 4],
+    [22, 6],
+    [28, 5],
+    [30, 8],
+    [27, 12],
+  ];
+  highlandStumps.forEach(([x, y]) => placeProp(tiles, x, y, "stump", true));
+
+  const highlandRocks: Array<[number, number]> = [
+    [18, 10],
+    [29, 14],
+    [31, 9],
+  ];
+  highlandRocks.forEach(([x, y]) => placeProp(tiles, x, y, "rock", true));
+}
+
 function addDesertZoneProps(tiles: Tile[]): void {
   const desertCactus: Array<[number, number]> = [
-    [34, 2], [36, 3], [39, 2], [42, 3], [45, 4],
-    [33, 7], [36, 8], [40, 7], [44, 8], [46, 9],
-    [35, 12], [38, 13], [42, 12], [45, 13],
+    [33, 7], [35, 9], [38, 10], [42, 8], [44, 10],
+    [35, 13], [39, 13], [43, 12],
   ];
   desertCactus.forEach(([x, y]) => placeProp(tiles, x, y, "cactus", true));
 
   const desertRocks: Array<[number, number]> = [
     [34, 18],
-    [36, 19],
-    [40, 18],
-    [43, 20],
+    [37, 19],
+    [41, 18],
+    [44, 20],
     [35, 35],
     [41, 36],
   ];
@@ -785,12 +1352,11 @@ function addDesertZoneProps(tiles: Tile[]): void {
 
 function addDungeonZoneProps(tiles: Tile[]): void {
   const stoneDebris: Array<[number, number]> = [
-    [19, 34],
     [22, 35],
+    [24, 37],
     [27, 34],
-    [29, 36],
-    [21, 42],
     [26, 43],
+    [42, 39],
   ];
   stoneDebris.forEach(([x, y]) => placeProp(tiles, x, y, "rock", true));
 
@@ -801,6 +1367,7 @@ function addDungeonZoneProps(tiles: Tile[]): void {
     [42, 36],
     [37, 42],
     [44, 43],
+    [39, 40],
   ];
   crates.forEach(([x, y]) => placeProp(tiles, x, y, "crate", true));
 }
@@ -810,8 +1377,13 @@ function applyDecorCollisionFootprints(tiles: Tile[]): void {
     "house_a",
     "house_b",
     "house_c",
+    "house_d",
+    "forest_grove_a",
+    "forest_grove_b",
     "ruin_a",
     "ruin_b",
+    "stone_cluster",
+    "citadel_tower",
     "fence_h",
     "fence_v",
     "well",
@@ -840,7 +1412,7 @@ function clearRoadProps(tiles: Tile[], axis: number, orientation: "vertical" | "
 function clearProtectedPathTiles(tiles: Tile[]): void {
   for (const pathTile of PROTECTED_PATH_TILES) {
     setTile(tiles, pathTile.x, pathTile.y, {
-      terrain: "road",
+      terrain: pathTile.terrain,
       blocked: false,
       destructible: false,
       prop: "none",
@@ -894,6 +1466,18 @@ function normalizeActorPositions(state: SoloGameState): void {
   const occupied = new Set<string>([`${Math.round(state.player.x)},${Math.round(state.player.y)}`]);
   for (const actor of state.actors) {
     if (!actor.alive) continue;
+    const anchor = getActorAnchor(actor.id);
+    if (anchor) {
+      const anchorTile = state.tiles[idxOf(anchor.x, anchor.y)];
+      const anchorKey = `${anchor.x},${anchor.y}`;
+      if (isWalkableTile(anchorTile) && !occupied.has(anchorKey)) {
+        actor.x = anchor.x;
+        actor.y = anchor.y;
+        occupied.add(anchorKey);
+        continue;
+      }
+    }
+
     const rawX = Math.min(Math.max(Math.round(actor.x), 0), WORLD_WIDTH - 1);
     const rawY = Math.min(Math.max(Math.round(actor.y), 0), WORLD_HEIGHT - 1);
     const { cx, cy } = chunkOf(rawX, rawY);
@@ -948,7 +1532,14 @@ function normalizeTilePropsForBiome(tiles: Tile[]): void {
       if (nextProp === "palm") nextProp = "cactus";
       if (nextProp === "ruin") nextProp = "rock";
 
-      if (tile.poi !== null && nextProp !== "none") {
+      if (
+        tile.poi !== null &&
+        nextProp !== "none" &&
+        nextProp !== "hole" &&
+        nextProp !== "crater" &&
+        nextProp !== "charred" &&
+        nextProp !== "rubble"
+      ) {
         nextProp = "none";
       }
 
@@ -960,14 +1551,18 @@ function normalizeTilePropsForBiome(tiles: Tile[]): void {
         if (tile.terrain !== "dungeon" && tile.terrain !== "boss") nextProp = "none";
       } else if (nextProp === "rock") {
         if (tile.terrain === "water") nextProp = "none";
+      } else if (nextProp === "hole" || nextProp === "crater" || nextProp === "charred" || nextProp === "rubble") {
+        if (tile.terrain === "water") nextProp = "none";
       }
 
       if (nextProp !== tile.prop) {
+        const persistentGroundScar =
+          nextProp === "hole" || nextProp === "crater" || nextProp === "charred" || nextProp === "rubble";
         tiles[index] = {
           ...tile,
           prop: nextProp,
-          blocked: nextProp === "none" ? tile.blocked : true,
-          destructible: nextProp === "none" ? false : tile.destructible || true,
+          blocked: nextProp === "none" ? tile.blocked : persistentGroundScar ? false : true,
+          destructible: nextProp === "none" ? false : persistentGroundScar ? false : tile.destructible || true,
         };
       }
     }
@@ -976,6 +1571,8 @@ function normalizeTilePropsForBiome(tiles: Tile[]): void {
 
 export function enforceWorldCoherence(state: SoloGameState): void {
   if (!Array.isArray(state.tiles) || state.tiles.length !== WORLD_WIDTH * WORLD_HEIGHT) return;
+
+  applyCanonicalGroundPatches(state.tiles);
 
   for (let x = 0; x < WORLD_WIDTH; x += 1) {
     setTile(state.tiles, x, 0, { terrain: "water", blocked: true, destructible: false, prop: "none" });
@@ -999,6 +1596,7 @@ export function enforceWorldCoherence(state: SoloGameState): void {
   for (const poi of CANONICAL_POI_PLACEMENTS) {
     setTile(state.tiles, poi.x, poi.y, {
       poi: poi.poi,
+      terrain: getTile(state, poi.x, poi.y)?.terrain ?? "road",
       blocked: false,
       destructible: false,
       prop: "none",

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createSoloSession } from "@/lib/solo/sessionStore";
 import { createInitialSoloState } from "@/lib/solo/world";
 
 type StartPayload = {
@@ -21,13 +22,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "power_text_required" }, { status: 400 });
     }
 
-    const state = createInitialSoloState({
+    const state = createSoloSession(createInitialSoloState({
       playerName,
       powerText,
       powerRoll,
       powerAccepted,
       characterId: body.characterId,
-    });
+    }));
 
     return NextResponse.json({ ok: true, state });
   } catch {

@@ -1,7 +1,7 @@
 # Oracle20 - Engine Spec (Technique)
 
-Date: 2026-03-16  
-Status: spec de reference pour developpement et review.
+Date: 2026-03-18  
+Status: spec de reference pour runtime actuel + extension cible a implementer.
 
 ## 1) Stack actuelle
 - Next.js 14 (App Router)
@@ -37,6 +37,19 @@ Status: spec de reference pour developpement et review.
 - `lib/solo/logic.ts`: `buildActionContext()` + `applyOutcome()`
 - `lib/solo/resolve.ts`: LLM orchestration + fallback parser local
 - `lib/solo/assets.ts`: resolution item -> icon/sprite/emoji
+
+## 2.1) Pivot interaction valide pour la prochaine phase
+
+Le runtime actuel est encore pilote par un input texte global.  
+La prochaine phase doit le faire evoluer vers un modele `embodied interaction`:
+
+- deplacement clavier remappable (`ZQSD` par defaut),
+- clic gauche pour bouger / selectionner,
+- clic droit pour ouvrir un popup d interaction contextuelle sur PNJ, structure, objet ou sol,
+- bulles locales dans la scene,
+- panneau `Narrateur MJ` conserve comme historique et narration persistante.
+
+Reference canonique de cette phase: [INTERACTION_REWORK_SPEC.md](/c:/Users/Daiki/Desktop/Rollplay/docs/INTERACTION_REWORK_SPEC.md)
 
 ## 3) Donnees principales actuelles
 ### Constantes
@@ -78,6 +91,119 @@ Status: spec de reference pour developpement et review.
 - deltas stats: hp/gold/stress/strength
 - objectif: `objectivePatch`, `completeObjective`
 
+## 3.1) Extensions de donnees cibles
+
+La prochaine phase doit ajouter trois blocs de donnees structurants:
+
+### a. Stats joueur etendues
+- `force`
+- `vitesse`
+- `volonte`
+- `magie`
+- `aura`
+
+Stats secondaires recommandees:
+- `defense`
+- `precision`
+- `esquive`
+- `perception`
+- `discretion`
+- `chance`
+- `initiative`
+- `charisme`
+- `endurance`
+- `resonance`
+
+Le socle actuel `hp / lives / gold / stress / rank` reste actif.
+
+### b. Registre d entites monde
+
+Le monde doit exposer des cibles stables:
+
+- `actor`
+- `structure`
+- `object`
+- `tile`
+- `edge`
+
+Chaque entite interactive doit avoir au minimum:
+
+- `id`
+- `type`
+- `label`
+- `footprint`
+- `blockedCells`
+- `approachCells`
+- `interactionCells`
+- `bubbleAnchor`
+- `labelAnchor`
+- `role`
+- `profession`
+- `faction`
+- `personality`
+- `loreSummary`
+- `homeAnchor`
+- `workAnchor`
+- `patrolProfile`
+- `relationshipToPlayer`
+- `recruitmentEligible`
+- `recruitmentMode`
+- `loyalty`
+- `morale`
+- `obedience`
+- `bravery`
+- `trust`
+- `fear`
+- `greed`
+- `alertness`
+- `aura`
+- `force`
+- `vitesse`
+- `volonte`
+- `magie`
+- `defense`
+- `precision`
+- `esquive`
+- `perception`
+- `discretion`
+- `chance`
+- `hearingRange`
+- `sightRange`
+- `aggroRange`
+- `actionCooldowns`
+- `memoryFlags`
+- `tags`
+- `capabilities`
+- `states`
+
+### c. Input contextuel
+
+Le simple `{ actionText, state }` doit evoluer vers une requete ciblee:
+
+```ts
+type PlayerInteractionRequest = {
+  inputMode: "keyboard" | "mouse";
+  actionText: string;
+  targetRef:
+    | { id: string; type: "actor" | "structure" | "object" | "tile" | "edge" | "self" }
+    | null;
+  targetTile: { x: number; y: number } | null;
+  playerOrigin: { x: number; y: number; chunkX: number; chunkY: number };
+  requestedApproach: boolean;
+  uiIntentHint:
+    | "move"
+    | "talk"
+    | "inspect"
+    | "trade"
+    | "attack"
+    | "use"
+    | "alter_world"
+    | "transition"
+    | null;
+  repeatSignature: string;
+};
+```
+
 ## 4) Pipeline action actuel
 1. UI recoit texte joueur.
 2. UI ajoute log optimiste.
@@ -89,6 +215,25 @@ Status: spec de reference pour developpement et review.
 - sinon fallback local
 7. `applyOutcome()` applique la mutation d etat.
 8. UI affiche narration, D20, effets visuels.
+
+## 4.1) Pipeline interaction cible
+1. Le joueur se deplace au clavier ou a la souris.
+2. Le joueur selectionne une cible ou une case.
+3. Le popup d interaction contextualise le texte libre.
+4. Le client emet un `PlayerInteractionRequest`.
+5. Le serveur reconstruit un contexte enrichi autour de la cible.
+6. Le resolver verifie la portee et declenche une approche visible si necessaire.
+7. Le moteur resout l intention, applique les ops, puis journalise.
+8. L UI affiche:
+- bulle intention joueur
+- bulle reponse cible/monde
+- resultat D20
+- narration persistante dans `Narrateur MJ`
+
+Contraintes de navigation:
+- aucun deplacement diagonal
+- chemin souris previsualise avant clic
+- le chemin execute doit etre identique au chemin affiche
 
 ## 5) Details `applyOutcome()` (ordre d application)
 Ordre actuel:
@@ -114,6 +259,15 @@ Ordre actuel:
 - rendu personnage principal avec idle bob + walk frames
 - animation combat simplifiee (scene neutral type duel)
 - animation item gain (loot fx)
+
+Prochaine phase UI/map:
+- highlights de cible et de trajectoire
+- fleches de transition de chunk cote souris
+- slide direct au clavier sur bord valide
+- popup d interaction contextuel
+- bulles locales pour action et reponse
+- surbrillance de chemin orthogonal
+- animation d aggro et de focus
 
 ## 7) Assets
 Source principale: `public/assets/Ninja Adventure - Asset Pack/...`
@@ -142,10 +296,35 @@ Resolver objet:
 4. event log non structure replay.
 5. interactions complexes encore narratives.
 6. le serveur travaille encore a partir d un snapshot de state envoye par le client.
+7. le chat global reste l interface principale alors que le gameplay est spatial.
+8. les batiments, props et edges ne sont pas encore traites comme un registre unifie d entites interactives.
+9. anti-repeat et memoire de tentative par cible absents.
+10. pas encore de monde vivant reactif (aggro continu, directeur d evenements, personnalite PNJ).
 
 ## 10) Architecture cible (a implementer)
 Objectif:
 `WorldOp DSL + Validator + Policy Engine + EventLog`
+
+### 10.0 Couche interaction monde
+Avant meme le `WorldOp DSL`, le runtime doit ajouter une couche d interaction explicite entre UI et moteur.
+
+Pieces attendues:
+- navigation clavier remappable
+- selection/focus cible
+- popup contextuel
+- registre `WorldEntity`
+- pathfinding vers `approachCells`
+- bulles locales
+- signature anti-repeat
+- preview de trajectoire
+- IA ennemie reactive
+- directeur d evenements
+- profils de mouvement PNJ
+
+Regle:
+- le texte libre reste au coeur du jeu,
+- mais il est toujours attache a une cible ou une zone quand c est possible,
+- l interface primaire n est plus une console, c est le monde lui-meme.
 
 ### 10.1 WorldOp DSL (runtime authoritaire)
 Chaque mutation monde doit passer par une op typée.
@@ -322,6 +501,7 @@ Exemples generiques:
 ## 12) Protocol IA cible
 ### Input (ContextPack)
 - player snapshot
+- selected target / selected tile / edge if any
 - nearby entities/tiles/POI
 - active laws/policies/capabilities
 - recent events
@@ -423,6 +603,139 @@ Capacites minimales par entite (selon policy):
 - `capturable`
 - `interactable`
 
+Capacites recommandees supplementaires:
+- `inspectable`
+- `talkable`
+- `haggle`
+- `restable`
+- `lootable`
+- `quest_source`
+- `crime_reporter`
+- `patrol`
+- `aggro`
+- `event_anchor`
+
+## 13.1 IA ennemie et perception
+
+Les hostiles doivent etre modelises comme des agents simples mais reels.
+
+Variables minimales:
+- `sightRange`
+- `hearingRange`
+- `aggroRange`
+- `alertness`
+- `currentTargetId`
+- `lastKnownTargetTile`
+- `leashRadius`
+- `combatStyle`
+- `threatBias`
+
+Comportements minimaux:
+- detecter le joueur s il passe dans leur zone valide,
+- ne pas attaquer a travers un obstacle bloqueur,
+- memoriser une cible pendant quelques tours,
+- abandonner si la cible sort de la logique de poursuite,
+- retourner a leur zone ou patrouille.
+
+## 13.2 Mouvement PNJ
+
+Les PNJ non hostiles doivent avoir un modele de vie local.
+
+Variables utiles:
+- `homeAnchor`
+- `workAnchor`
+- `patrolProfile`
+- `scheduleKey`
+- `wanderRadius`
+- `socialNodes`
+- `forbiddenZones`
+
+Regles:
+- rester compatibles avec leur role,
+- eviter les rotations absurdes,
+- ne pas sortir de leur quartier sans raison,
+- pouvoir reager localement a une interaction proche.
+
+## 13.3 Directeur d evenements
+
+Le monde doit exposer un systeme `WorldEventDirector`.
+
+Contrat:
+- evaluation toutes les `3 a 10` actions joueur,
+- choix pondere par biome, tension, quetes, recent history et etat du monde,
+- interdiction de repeter le meme template trop vite,
+- interdiction de casser une progression critique sans compensation.
+
+Sorties possibles:
+- `spawn_hostile_wave`
+- `unlock_quest_offer`
+- `open_market_window`
+- `raise_guard_alert`
+- `start_fire`
+- `spawn_traveler_request`
+- `spawn_rare_creature`
+- `trigger_arcane_anomaly`
+- `change_shop_stock`
+- `broadcast_rumor`
+
+## 13.4 Crime, reputation, justice
+
+Le moteur cible doit exposer une memoire sociale persistante.
+
+State minimal recommande:
+- `globalReputation`
+- `factionReputations`
+- `zoneReputations`
+- `activeIncidents`
+- `crimeLedger`
+- `activeBounties`
+- `zoneAlertLevels`
+- `rumorFlags`
+
+Contrat:
+- tuer un civil ou un PNJ protégé peut ouvrir un incident de crime,
+- des temoins directs ou indirects peuvent alimenter cet incident,
+- la reaction de la milice, des gardes, du commerce et des villageois depend de cet historique,
+- quitter puis revenir dans la zone ne doit pas effacer l hostilite.
+
+Exemples d ops ciblees:
+- `record_crime`
+- `witness_report`
+- `set_bounty`
+- `set_zone_alert`
+- `spawn_militia_response`
+- `reputation_delta`
+- `set_faction_hostility`
+- `clear_incident`
+
+## 13.5 Recrutement et followers
+
+Le moteur cible doit supporter les companions.
+
+State minimal recommande:
+- `followers[]`
+- `followerLimit`
+- `leaderAssignments`
+- `companionOrders`
+- `loyaltyState`
+- `moraleState`
+
+Capacites utiles:
+- `recruitable`
+- `tamable`
+- `commandable`
+- `summonable`
+
+Exemples d ops ciblees:
+- `recruit_actor`
+- `dismiss_follower`
+- `set_follower_order`
+- `loyalty_delta`
+- `morale_delta`
+- `break_contract`
+- `tame_creature`
+- `release_creature`
+
 ## 14) Contraintes perf recommandees
 - max ops par action: 12
 - max batch tiles par action: 32
@@ -454,7 +767,14 @@ Output:
 Input:
 - `sessionId: string`
 - `clientTurnId: string`
+- `inputMode: "keyboard" | "mouse"`
 - `actionText: string`
+- `targetRef?: { id: string; type: "actor" | "structure" | "object" | "tile" | "edge" | "self" } | null`
+- `targetTile?: { x: number; y: number } | null`
+- `playerOrigin: { x: number; y: number; chunkX: number; chunkY: number }`
+- `requestedApproach?: boolean`
+- `uiIntentHint?: "move" | "talk" | "inspect" | "trade" | "attack" | "use" | "alter_world" | "transition" | null`
+- `repeatSignature: string`
 - `stateDigest: string`
 
 Output:
@@ -464,6 +784,7 @@ Output:
 - `rejectedOps: { opId?: string; code: RejectCode; reason: string }[]`
 - `stateDelta: GameStateDelta`
 - `narration: { storyLine: string; narrative: string; worldEvent?: string }`
+- `speechBubbles?: Array<{ entityId?: string; at: { x: number; y: number }; text: string; tone?: string }>`
 - `eventId: string`
 
 Garanties:
@@ -476,7 +797,8 @@ Families minimales a impler en v1:
 - inventory: `add_item`, `consume_item`, `drop_item`, `equip_item`, `unequip_item`
 - economy: `gold_delta`, `buy_item`, `sell_item`, `shop_stock_delta`
 - world: `mutate_tile`, `mutate_entity_state`, `spawn_entity`, `despawn_entity`
-- social: `dialogue_start`, `relation_delta`, `faction_delta`
+- social: `dialogue_start`, `relation_delta`, `faction_delta`, `reputation_delta`, `record_crime`, `witness_report`, `set_bounty`
+- companion: `recruit_actor`, `dismiss_follower`, `set_follower_order`, `loyalty_delta`, `morale_delta`, `tame_creature`
 - quest/objective: `quest_add`, `quest_update`, `quest_complete`, `objective_patch`
 - governance: `set_owner`, `set_access_policy`, `set_price_policy`
 - generalization-safe: `record_unknown_intent`, `advance_time`, `reputation_delta`, `log_system_message`

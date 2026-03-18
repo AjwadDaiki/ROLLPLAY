@@ -1,0 +1,460 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Atlas des assets de map</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0a1020;
+      --panel: #11192d;
+      --stroke: #7f6336;
+      --text: #f2f6ff;
+      --muted: #9eb2d7;
+      --accent: #ffe2a0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Segoe UI, sans-serif;
+      color: var(--text);
+      background: radial-gradient(circle at top, #15233f 0%, var(--bg) 60%);
+    }
+    main {
+      max-width: 1680px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    header {
+      padding: 18px 20px;
+      border: 1px solid var(--stroke);
+      border-radius: 20px;
+      background: rgba(17, 25, 45, 0.92);
+      margin-bottom: 18px;
+    }
+    h1 {
+      margin: 0 0 6px;
+      font-size: 28px;
+      color: var(--accent);
+    }
+    p.sub {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 16px;
+    }
+    .card {
+      display: grid;
+      grid-template-columns: 110px 1fr;
+      gap: 14px;
+      padding: 14px;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(17, 25, 45, 0.92);
+      box-shadow: 0 14px 36px rgba(0, 0, 0, 0.18);
+    }
+    canvas {
+      width: 96px;
+      height: 96px;
+      border-radius: 12px;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      background:
+        linear-gradient(45deg, rgba(255,255,255,0.04) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.04) 75%),
+        linear-gradient(45deg, rgba(255,255,255,0.04) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.04) 75%);
+      background-size: 18px 18px;
+      background-position: 0 0, 9px 9px;
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+    .meta {
+      min-width: 0;
+    }
+    .label {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+    .id {
+      font-size: 12px;
+      color: #86b6ff;
+      margin-bottom: 4px;
+    }
+    .category {
+      display: inline-block;
+      margin-bottom: 8px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: rgba(255, 226, 160, 0.12);
+      border: 1px solid rgba(255, 226, 160, 0.24);
+      color: var(--accent);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .meta p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Atlas des assets de map</h1>
+      <p class="sub">Catalogue semantique des morceaux canoniques utilises par la map. Verifie ici qu un sprite est bien associe a un role clair avant de l employer.</p>
+    </header>
+    <section class="grid">
+        <article class="card" data-index="0">
+          <canvas width="96" height="96" data-canvas="0"></canvas>
+          <div class="meta">
+            <div class="label">Village plaza warm A</div>
+            <div class="id">terrain.village.floor_a</div>
+            <div class="category">terrain</div>
+            <p>Sol village chaud, propre et lisible.</p>
+          </div>
+        </article>
+      
+        <article class="card" data-index="1">
+          <canvas width="96" height="96" data-canvas="1"></canvas>
+          <div class="meta">
+            <div class="label">Village plaza warm B</div>
+            <div class="id">terrain.village.floor_b</div>
+            <div class="category">terrain</div>
+            <p>Variante lisse pour casser la repetition.</p>
+          </div>
+        </article>
+      
+        <article class="card" data-index="2">
+          <canvas width="96" height="96" data-canvas="2"></canvas>
+          <div class="meta">
+            <div class="label">Village plaza A</div>
+            <div class="id">terrain.village.plaza_a</div>
+            <div class="category">terrain</div>
+            <p>Dalle orange propre pour la place du village.</p>
+          </div>
+        </article>
+      
+        <article class="card" data-index="3">
+          <canvas width="96" height="96" data-canvas="3"></canvas>
+          <div class="meta">
+            <div class="label">Village plaza B</div>
+            <div class="id">terrain.village.plaza_b</div>
+            <div class="category">terrain</div>
+            <p>Variante lisse de la place du village.</p>
+          </div>
+        </article>
+      
+        <article class="card" data-index="4">
+          <canvas width="96" height="96" data-canvas="4"></canvas>
+          <div class="meta">
+            <div class="label">Road cobble A</div>
+            <div class="id">terrain.road.cobble_a</div>
+            <div class="category">terrain</div>
+            <p>Route chaude pour les axes principaux.</p>
+          </div>
+        </article>
+      
+        <article class="card" data-index="5">
+          <canvas width="96" height="96" data-canvas="5"></canvas>
+          <div class="meta">
+            <div class="label">Road cobble B</div>
+            <div class="id">terrain.road.cobble_b</div>
+            <div class="category">terrain</div>
+            <p>Variante route orange.</p>
+          </div>
+        </article>
+      
+        <article class="card" data-index="6">
+          <canvas width="96" height="96" data-canvas="6"></canvas>
+          <div class="meta">
+            <div class="label">Dungeon floor A</div>
+            <div class="id">terrain.dungeon.floor_a</div>
+            <div class="category">terrain</div>
+            <p>Dalle grise lisible pour donjon.</p>
+          </div>
+        </article>
+      
+        <article class="card" data-index="7">
+          <canvas width="96" height="96" data-canvas="7"></canvas>
+          <div class="meta">
+            <div class="label">Dungeon floor B</div>
+            <div class="id">terrain.dungeon.floor_b</div>
+            <div class="category">terrain</div>
+            <p>Variante grise secondaire.</p>
+          </div>
+        </article>
+      
+        <article class="card" data-index="8">
+          <canvas width="96" height="96" data-canvas="8"></canvas>
+          <div class="meta">
+            <div class="label">Citadel floor A</div>
+            <div class="id">terrain.boss.floor_a</div>
+            <div class="category">terrain</div>
+            <p>Dalle plus noire pour la citadelle.</p>
+          </div>
+        </article>
+      
+        <article class="card" data-index="9">
+          <canvas width="96" height="96" data-canvas="9"></canvas>
+          <div class="meta">
+            <div class="label">Relief top border</div>
+            <div class="id">relief.border.top</div>
+            <div class="category">relief</div>
+            <p>Morceau de falaise/bord pour frontieres.</p>
+          </div>
+        </article>
+      
+        <article class="card" data-index="10">
+          <canvas width="96" height="96" data-canvas="10"></canvas>
+          <div class="meta">
+            <div class="label">Relief side border</div>
+            <div class="id">relief.border.side</div>
+            <div class="category">relief</div>
+            <p>Mur vertical pour limites.</p>
+          </div>
+        </article>
+      
+        <article class="card" data-index="11">
+          <canvas width="96" height="96" data-canvas="11"></canvas>
+          <div class="meta">
+            <div class="label">Cave entrance</div>
+            <div class="id">relief.cave.entrance</div>
+            <div class="category">decor</div>
+            <p>Entree naturelle pour donjon.</p>
+          </div>
+        </article>
+      
+        <article class="card" data-index="12">
+          <canvas width="96" height="96" data-canvas="12"></canvas>
+          <div class="meta">
+            <div class="label">Guild facade</div>
+            <div class="id">building.guild</div>
+            <div class="category">building</div>
+            <p>Facade utilisee pour la guilde.</p>
+          </div>
+        </article>
+      
+        <article class="card" data-index="13">
+          <canvas width="96" height="96" data-canvas="13"></canvas>
+          <div class="meta">
+            <div class="label">Inn facade</div>
+            <div class="id">building.inn</div>
+            <div class="category">building</div>
+            <p>Facade auberge.</p>
+          </div>
+        </article>
+      
+        <article class="card" data-index="14">
+          <canvas width="96" height="96" data-canvas="14"></canvas>
+          <div class="meta">
+            <div class="label">Shop facade</div>
+            <div class="id">building.shop</div>
+            <div class="category">building</div>
+            <p>Ancienne facade boutique a eviter a cause du double-portique.</p>
+          </div>
+        </article>
+      
+        <article class="card" data-index="15">
+          <canvas width="96" height="96" data-canvas="15"></canvas>
+          <div class="meta">
+            <div class="label">Shop facade alt</div>
+            <div class="id">building.shop_alt</div>
+            <div class="category">building</div>
+            <p>Facade boutique complete sans double-portique.</p>
+          </div>
+        </article>
+      
+        <article class="card" data-index="16">
+          <canvas width="96" height="96" data-canvas="16"></canvas>
+          <div class="meta">
+            <div class="label">Guild sign</div>
+            <div class="id">prop.guild_sign</div>
+            <div class="category">prop</div>
+            <p>Petit panneau pour marquer la guilde.</p>
+          </div>
+        </article>
+      
+        <article class="card" data-index="17">
+          <canvas width="96" height="96" data-canvas="17"></canvas>
+          <div class="meta">
+            <div class="label">Inn sign</div>
+            <div class="id">prop.inn_sign</div>
+            <div class="category">prop</div>
+            <p>Enseigne auberge.</p>
+          </div>
+        </article>
+      
+        <article class="card" data-index="18">
+          <canvas width="96" height="96" data-canvas="18"></canvas>
+          <div class="meta">
+            <div class="label">Shop stall</div>
+            <div class="id">prop.shop_stall</div>
+            <div class="category">prop</div>
+            <p>Etal de marche.</p>
+          </div>
+        </article>
+      
+        <article class="card" data-index="19">
+          <canvas width="96" height="96" data-canvas="19"></canvas>
+          <div class="meta">
+            <div class="label">Well</div>
+            <div class="id">prop.well</div>
+            <div class="category">prop</div>
+            <p>Puits central.</p>
+          </div>
+        </article>
+      
+        <article class="card" data-index="20">
+          <canvas width="96" height="96" data-canvas="20"></canvas>
+          <div class="meta">
+            <div class="label">Oak tree</div>
+            <div class="id">prop.tree.oak</div>
+            <div class="category">prop</div>
+            <p>Arbre rond plus riche pour les forets.</p>
+          </div>
+        </article>
+      
+        <article class="card" data-index="21">
+          <canvas width="96" height="96" data-canvas="21"></canvas>
+          <div class="meta">
+            <div class="label">Desert shrub</div>
+            <div class="id">prop.desert.shrub</div>
+            <div class="category">prop</div>
+            <p>Petit palmier desertique utilise a la place du faux cactus.</p>
+          </div>
+        </article>
+      
+        <article class="card" data-index="22">
+          <canvas width="96" height="96" data-canvas="22"></canvas>
+          <div class="meta">
+            <div class="label">Dungeon rubble</div>
+            <div class="id">prop.dungeon.rubble</div>
+            <div class="category">prop</div>
+            <p>Debris issus du tileset donjon pour casser le vide.</p>
+          </div>
+        </article>
+      
+        <article class="card" data-index="23">
+          <canvas width="96" height="96" data-canvas="23"></canvas>
+          <div class="meta">
+            <div class="label">Forest grove</div>
+            <div class="id">decor.forest.grove</div>
+            <div class="category">decor</div>
+            <p>Bosquet 2x2 compose de quatre arbres.</p>
+          </div>
+        </article>
+      
+        <article class="card" data-index="24">
+          <canvas width="96" height="96" data-canvas="24"></canvas>
+          <div class="meta">
+            <div class="label">Stone cluster</div>
+            <div class="id">decor.stone.cluster</div>
+            <div class="category">decor</div>
+            <p>Gros amas rocheux pour donjon/citadelle.</p>
+          </div>
+        </article>
+      
+        <article class="card" data-index="25">
+          <canvas width="96" height="96" data-canvas="25"></canvas>
+          <div class="meta">
+            <div class="label">Citadel tower</div>
+            <div class="id">decor.citadel.tower</div>
+            <div class="category">decor</div>
+            <p>Tour de garde stylisee pour la zone boss.</p>
+          </div>
+        </article>
+      
+        <article class="card" data-index="26">
+          <canvas width="96" height="96" data-canvas="26"></canvas>
+          <div class="meta">
+            <div class="label">Moss ruin A</div>
+            <div class="id">ruin.moss_a</div>
+            <div class="category">ruin</div>
+            <p>Ruine desertique plus lisible.</p>
+          </div>
+        </article>
+      
+        <article class="card" data-index="27">
+          <canvas width="96" height="96" data-canvas="27"></canvas>
+          <div class="meta">
+            <div class="label">Moss ruin B</div>
+            <div class="id">ruin.moss_b</div>
+            <div class="category">ruin</div>
+            <p>Ruine secondaire.</p>
+          </div>
+        </article>
+      
+        <article class="card" data-index="28">
+          <canvas width="96" height="96" data-canvas="28"></canvas>
+          <div class="meta">
+            <div class="label">Citadel gate</div>
+            <div class="id">fortress.red_gate</div>
+            <div class="category">fortress</div>
+            <p>Portail citadelle/boss.</p>
+          </div>
+        </article>
+      </section>
+  </main>
+  <script>
+    const DATA = [{"id":"terrain.village.floor_a","label":"Village plaza warm A","category":"terrain","note":"Sol village chaud, propre et lisible.","asset":"floor","sx":0,"sy":0,"sw":16,"sh":16,"src":"../public/assets/Ninja%20Adventure%20-%20Asset%20Pack/Ninja%20Adventure%20-%20Asset%20Pack/Backgrounds/Tilesets/TilesetFloor.png","index":0},{"id":"terrain.village.floor_b","label":"Village plaza warm B","category":"terrain","note":"Variante lisse pour casser la repetition.","asset":"floor","sx":16,"sy":0,"sw":16,"sh":16,"src":"../public/assets/Ninja%20Adventure%20-%20Asset%20Pack/Ninja%20Adventure%20-%20Asset%20Pack/Backgrounds/Tilesets/TilesetFloor.png","index":1},{"id":"terrain.village.plaza_a","label":"Village plaza A","category":"terrain","note":"Dalle orange propre pour la place du village.","asset":"floor","sx":0,"sy":0,"sw":16,"sh":16,"src":"../public/assets/Ninja%20Adventure%20-%20Asset%20Pack/Ninja%20Adventure%20-%20Asset%20Pack/Backgrounds/Tilesets/TilesetFloor.png","index":2},{"id":"terrain.village.plaza_b","label":"Village plaza B","category":"terrain","note":"Variante lisse de la place du village.","asset":"floor","sx":16,"sy":16,"sw":16,"sh":16,"src":"../public/assets/Ninja%20Adventure%20-%20Asset%20Pack/Ninja%20Adventure%20-%20Asset%20Pack/Backgrounds/Tilesets/TilesetFloor.png","index":3},{"id":"terrain.road.cobble_a","label":"Road cobble A","category":"terrain","note":"Route chaude pour les axes principaux.","asset":"field","sx":16,"sy":16,"sw":16,"sh":16,"src":"../public/assets/Ninja%20Adventure%20-%20Asset%20Pack/Ninja%20Adventure%20-%20Asset%20Pack/Backgrounds/Tilesets/TilesetField.png","index":4},{"id":"terrain.road.cobble_b","label":"Road cobble B","category":"terrain","note":"Variante route orange.","asset":"field","sx":48,"sy":0,"sw":16,"sh":16,"src":"../public/assets/Ninja%20Adventure%20-%20Asset%20Pack/Ninja%20Adventure%20-%20Asset%20Pack/Backgrounds/Tilesets/TilesetField.png","index":5},{"id":"terrain.dungeon.floor_a","label":"Dungeon floor A","category":"terrain","note":"Dalle grise lisible pour donjon.","asset":"interiorFloor","sx":176,"sy":176,"sw":16,"sh":16,"src":"../public/assets/Ninja%20Adventure%20-%20Asset%20Pack/Ninja%20Adventure%20-%20Asset%20Pack/Backgrounds/Tilesets/Interior/TilesetInteriorFloor.png","index":6},{"id":"terrain.dungeon.floor_b","label":"Dungeon floor B","category":"terrain","note":"Variante grise secondaire.","asset":"interiorFloor","sx":192,"sy":176,"sw":16,"sh":16,"src":"../public/assets/Ninja%20Adventure%20-%20Asset%20Pack/Ninja%20Adventure%20-%20Asset%20Pack/Backgrounds/Tilesets/Interior/TilesetInteriorFloor.png","index":7},{"id":"terrain.boss.floor_a","label":"Citadel floor A","category":"terrain","note":"Dalle plus noire pour la citadelle.","asset":"interiorFloor","sx":176,"sy":256,"sw":16,"sh":16,"src":"../public/assets/Ninja%20Adventure%20-%20Asset%20Pack/Ninja%20Adventure%20-%20Asset%20Pack/Backgrounds/Tilesets/Interior/TilesetInteriorFloor.png","index":8},{"id":"relief.border.top","label":"Relief top border","category":"relief","note":"Morceau de falaise/bord pour frontieres.","asset":"relief","sx":32,"sy":0,"sw":32,"sh":32,"src":"../public/assets/Ninja%20Adventure%20-%20Asset%20Pack/Ninja%20Adventure%20-%20Asset%20Pack/Backgrounds/Tilesets/TilesetRelief.png","index":9},{"id":"relief.border.side","label":"Relief side border","category":"relief","note":"Mur vertical pour limites.","asset":"relief","sx":128,"sy":0,"sw":32,"sh":32,"src":"../public/assets/Ninja%20Adventure%20-%20Asset%20Pack/Ninja%20Adventure%20-%20Asset%20Pack/Backgrounds/Tilesets/TilesetRelief.png","index":10},{"id":"relief.cave.entrance","label":"Cave entrance","category":"decor","note":"Entree naturelle pour donjon.","asset":"reliefDetail","sx":0,"sy":160,"sw":64,"sh":32,"src":"../public/assets/Ninja%20Adventure%20-%20Asset%20Pack/Ninja%20Adventure%20-%20Asset%20Pack/Backgrounds/Tilesets/TilesetReliefDetail.png","index":11},{"id":"building.guild","label":"Guild facade","category":"building","note":"Facade utilisee pour la guilde.","asset":"house","sx":0,"sy":0,"sw":64,"sh":64,"src":"../public/assets/Ninja%20Adventure%20-%20Asset%20Pack/Ninja%20Adventure%20-%20Asset%20Pack/Backgrounds/Tilesets/TilesetHouse.png","index":12},{"id":"building.inn","label":"Inn facade","category":"building","note":"Facade auberge.","asset":"house","sx":64,"sy":0,"sw":64,"sh":64,"src":"../public/assets/Ninja%20Adventure%20-%20Asset%20Pack/Ninja%20Adventure%20-%20Asset%20Pack/Backgrounds/Tilesets/TilesetHouse.png","index":13},{"id":"building.shop","label":"Shop facade","category":"building","note":"Ancienne facade boutique a eviter a cause du double-portique.","asset":"house","sx":128,"sy":0,"sw":64,"sh":64,"src":"../public/assets/Ninja%20Adventure%20-%20Asset%20Pack/Ninja%20Adventure%20-%20Asset%20Pack/Backgrounds/Tilesets/TilesetHouse.png","index":14},{"id":"building.shop_alt","label":"Shop facade alt","category":"building","note":"Facade boutique complete sans double-portique.","asset":"house","sx":192,"sy":0,"sw":64,"sh":64,"src":"../public/assets/Ninja%20Adventure%20-%20Asset%20Pack/Ninja%20Adventure%20-%20Asset%20Pack/Backgrounds/Tilesets/TilesetHouse.png","index":15},{"id":"prop.guild_sign","label":"Guild sign","category":"prop","note":"Petit panneau pour marquer la guilde.","asset":"house","sx":48,"sy":64,"sw":32,"sh":16,"src":"../public/assets/Ninja%20Adventure%20-%20Asset%20Pack/Ninja%20Adventure%20-%20Asset%20Pack/Backgrounds/Tilesets/TilesetHouse.png","index":16},{"id":"prop.inn_sign","label":"Inn sign","category":"prop","note":"Enseigne auberge.","asset":"house","sx":480,"sy":64,"sw":16,"sh":16,"src":"../public/assets/Ninja%20Adventure%20-%20Asset%20Pack/Ninja%20Adventure%20-%20Asset%20Pack/Backgrounds/Tilesets/TilesetHouse.png","index":17},{"id":"prop.shop_stall","label":"Shop stall","category":"prop","note":"Etal de marche.","asset":"house","sx":256,"sy":256,"sw":48,"sh":32,"src":"../public/assets/Ninja%20Adventure%20-%20Asset%20Pack/Ninja%20Adventure%20-%20Asset%20Pack/Backgrounds/Tilesets/TilesetHouse.png","index":18},{"id":"prop.well","label":"Well","category":"prop","note":"Puits central.","asset":"house","sx":384,"sy":32,"sw":32,"sh":32,"src":"../public/assets/Ninja%20Adventure%20-%20Asset%20Pack/Ninja%20Adventure%20-%20Asset%20Pack/Backgrounds/Tilesets/TilesetHouse.png","index":19},{"id":"prop.tree.oak","label":"Oak tree","category":"prop","note":"Arbre rond plus riche pour les forets.","asset":"nature","sx":96,"sy":0,"sw":32,"sh":32,"src":"../public/assets/Ninja%20Adventure%20-%20Asset%20Pack/Ninja%20Adventure%20-%20Asset%20Pack/Backgrounds/Tilesets/TilesetNature.png","index":20},{"id":"prop.desert.shrub","label":"Desert shrub","category":"prop","note":"Petit palmier desertique utilise a la place du faux cactus.","asset":"desert","sx":160,"sy":128,"sw":32,"sh":32,"src":"../public/assets/Ninja%20Adventure%20-%20Asset%20Pack/Ninja%20Adventure%20-%20Asset%20Pack/Backgrounds/Tilesets/TilesetDesert.png","index":21},{"id":"prop.dungeon.rubble","label":"Dungeon rubble","category":"prop","note":"Debris issus du tileset donjon pour casser le vide.","asset":"dungeon","sx":0,"sy":0,"sw":16,"sh":16,"src":"../public/assets/Ninja%20Adventure%20-%20Asset%20Pack/Ninja%20Adventure%20-%20Asset%20Pack/Backgrounds/Tilesets/TilesetDungeon.png","index":22},{"id":"decor.forest.grove","label":"Forest grove","category":"decor","note":"Bosquet 2x2 compose de quatre arbres.","asset":"nature","sx":256,"sy":32,"sw":64,"sh":32,"src":"../public/assets/Ninja%20Adventure%20-%20Asset%20Pack/Ninja%20Adventure%20-%20Asset%20Pack/Backgrounds/Tilesets/TilesetNature.png","index":23},{"id":"decor.stone.cluster","label":"Stone cluster","category":"decor","note":"Gros amas rocheux pour donjon/citadelle.","asset":"nature","sx":256,"sy":224,"sw":64,"sh":64,"src":"../public/assets/Ninja%20Adventure%20-%20Asset%20Pack/Ninja%20Adventure%20-%20Asset%20Pack/Backgrounds/Tilesets/TilesetNature.png","index":24},{"id":"decor.citadel.tower","label":"Citadel tower","category":"decor","note":"Tour de garde stylisee pour la zone boss.","asset":"towers","sx":224,"sy":64,"sw":32,"sh":32,"src":"../public/assets/Ninja%20Adventure%20-%20Asset%20Pack/Ninja%20Adventure%20-%20Asset%20Pack/Backgrounds/Tilesets/TilesetTowers.png","index":25},{"id":"ruin.moss_a","label":"Moss ruin A","category":"ruin","note":"Ruine desertique plus lisible.","asset":"villageAbandoned","sx":96,"sy":0,"sw":64,"sh":64,"src":"../public/assets/Ninja%20Adventure%20-%20Asset%20Pack/Ninja%20Adventure%20-%20Asset%20Pack/Backgrounds/Tilesets/TilesetVillageAbandoned.png","index":26},{"id":"ruin.moss_b","label":"Moss ruin B","category":"ruin","note":"Ruine secondaire.","asset":"villageAbandoned","sx":160,"sy":0,"sw":64,"sh":64,"src":"../public/assets/Ninja%20Adventure%20-%20Asset%20Pack/Ninja%20Adventure%20-%20Asset%20Pack/Backgrounds/Tilesets/TilesetVillageAbandoned.png","index":27},{"id":"fortress.red_gate","label":"Citadel gate","category":"fortress","note":"Portail citadelle/boss.","asset":"towers","sx":192,"sy":0,"sw":64,"sh":64,"src":"../public/assets/Ninja%20Adventure%20-%20Asset%20Pack/Ninja%20Adventure%20-%20Asset%20Pack/Backgrounds/Tilesets/TilesetTowers.png","index":28}];
+    const imageCache = new Map();
+
+    window.addEventListener("load", async () => {
+      const urls = Array.from(new Set(DATA.map((entry) => entry.src)));
+      await Promise.all(urls.map(loadImage));
+      for (const entry of DATA) {
+        const canvas = document.querySelector('canvas[data-canvas="' + entry.index + '"]');
+        if (!canvas) continue;
+      }
+      document.querySelectorAll("canvas[data-canvas]").forEach((canvas) => {
+        const index = Number(canvas.getAttribute("data-canvas"));
+        const entry = DATA[index];
+        if (!entry) return;
+        drawEntry(canvas, entry);
+      });
+    });
+
+    function loadImage(src) {
+      if (imageCache.has(src)) return Promise.resolve(imageCache.get(src));
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          imageCache.set(src, img);
+          resolve(img);
+        };
+        img.onerror = () => {
+          imageCache.set(src, null);
+          resolve(null);
+        };
+        img.src = src;
+      });
+    }
+
+    function drawEntry(canvas, entry) {
+      const ctx = canvas.getContext("2d");
+      ctx.imageSmoothingEnabled = false;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const image = imageCache.get(entry.src);
+      if (!image) {
+        ctx.fillStyle = "rgba(255,255,255,0.08)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        return;
+      }
+      const scale = Math.min(canvas.width / entry.sw, canvas.height / entry.sh);
+      const dw = Math.floor(entry.sw * scale);
+      const dh = Math.floor(entry.sh * scale);
+      const dx = Math.floor((canvas.width - dw) / 2);
+      const dy = Math.floor((canvas.height - dh) / 2);
+      ctx.drawImage(image, entry.sx, entry.sy, entry.sw, entry.sh, dx, dy, dw, dh);
+    }
+  </script>
+</body>
+</html>

@@ -1,42 +1,32 @@
+import { CONFIG } from "./config";
+
 export type ShopCatalogEntry = {
   id: string;
   name: string;
   price: number;
   aliases: string[];
+  effect?: string;
+  value?: number;
 };
 
-export const SHOP_CATALOG: ShopCatalogEntry[] = [
-  {
-    id: "potion_heal",
-    name: "Potion de soin",
-    price: 12,
-    aliases: ["potion", "potion de soin", "soin", "heal"],
-  },
-  {
-    id: "torch",
-    name: "Torche",
-    price: 12,
-    aliases: ["torche", "torch", "flamme"],
-  },
-  {
-    id: "rope",
-    name: "Corde solide",
-    price: 12,
-    aliases: ["corde", "corde solide", "rope", "hook"],
-  },
-  {
-    id: "sword_iron",
-    name: "Epee en fer",
-    price: 12,
-    aliases: ["epee", "epee de base", "epee en fer", "sword", "lame"],
-  },
-  {
-    id: "food",
-    name: "Ration",
-    price: 12,
-    aliases: ["ration", "nourriture", "food", "pain"],
-  },
-];
+export const SHOP_CATALOG: ShopCatalogEntry[] = CONFIG.shop.catalog.map((entry) => ({
+  id: entry.id,
+  name: entry.name,
+  price: entry.price,
+  aliases: [...entry.aliases],
+  effect: entry.effect,
+  value: entry.value,
+}));
+
+export function getShopDiscountPercent(raw: number | null | undefined): number {
+  if (!Number.isFinite(raw)) return 0;
+  return Math.max(0, Math.min(CONFIG.shop.maxDiscountPercent, Math.round(raw ?? 0)));
+}
+
+export function getShopPrice(entry: ShopCatalogEntry, discountPercent?: number | null): number {
+  const safeDiscount = getShopDiscountPercent(discountPercent);
+  return Math.max(1, Math.floor((entry.price * (100 - safeDiscount)) / 100));
+}
 
 export function findShopCatalogEntry(rawName: string | null | undefined): ShopCatalogEntry | null {
   const normalized = normalize(rawName ?? "");
@@ -71,8 +61,11 @@ export function findShopCatalogEntry(rawName: string | null | undefined): ShopCa
   return bestScore > 0 ? best : null;
 }
 
-export function renderShopStockList(): string {
-  return `Stock: ${SHOP_CATALOG.map((entry) => entry.name.toLowerCase()).join(", ")}.`;
+export function renderShopStockList(discountPercent?: number | null): string {
+  const safeDiscount = getShopDiscountPercent(discountPercent);
+  const items = SHOP_CATALOG.map((entry) => `${entry.name.toLowerCase()} (${getShopPrice(entry, safeDiscount)} or)`);
+  const discountLabel = safeDiscount > 0 ? ` Remise active: -${safeDiscount}%.` : "";
+  return `Stock: ${items.join(", ")}.${discountLabel}`;
 }
 
 function normalize(value: string): string {

@@ -260,6 +260,20 @@ function auditBiomeConsistency(state: SoloGameState): Finding[] {
           message: `crate at (${x},${y}) is on ${tile.terrain} instead of dungeon/boss.`,
         });
       }
+      if ((tile.prop === "charred" || tile.prop === "rubble") && tile.terrain === "water") {
+        findings.push({
+          severity: "high",
+          scope: "biome-consistency",
+          message: `${tile.prop} at (${x},${y}) should never appear on water.`,
+        });
+      }
+      if ((tile.prop === "hole" || tile.prop === "crater") && tile.terrain === "water") {
+        findings.push({
+          severity: "high",
+          scope: "biome-consistency",
+          message: `${tile.prop} at (${x},${y}) should never appear on water.`,
+        });
+      }
     }
   }
 
@@ -431,6 +445,7 @@ async function auditScenarioBatch(
   resolveLib: typeof import("../lib/solo/resolve")
 ): Promise<Finding[]> {
   const treeTarget = findTile(base, (tile) => tile.prop === "tree");
+  const groundTarget = findTile(base, (tile) => tile.prop === "none" && !tile.blocked && tile.poi === null && tile.terrain === "road");
   const scenarios: Scenario[] = [
     {
       id: "remote_buy_walks_first",
@@ -573,6 +588,62 @@ async function auditScenarioBatch(
       },
     },
     {
+      id: "digging_marks_the_ground",
+      actionText: "je creuse ici",
+      setup: (state) => {
+        if (!groundTarget) return state;
+        return withPlayerAt(state, groundTarget.x, groundTarget.y);
+      },
+      check: ({ next }) => {
+        const out: Finding[] = [];
+        if (!groundTarget) {
+          out.push({
+            severity: "medium",
+            scope: "scenario:digging_marks_the_ground",
+            message: "No clean ground target found for dig scenario.",
+          });
+          return out;
+        }
+        const tile = next.tiles[idxOf(next, groundTarget.x, groundTarget.y)];
+        if (!tile || (tile.prop !== "hole" && tile.prop !== "crater")) {
+          out.push({
+            severity: "high",
+            scope: "scenario:digging_marks_the_ground",
+            message: `Digging did not leave a visible ground mark, got ${String(tile?.prop)}.`,
+          });
+        }
+        if (tile?.blocked) {
+          out.push({
+            severity: "high",
+            scope: "scenario:digging_marks_the_ground",
+            message: "Digging created a blocked tile under the player.",
+          });
+        }
+        return out;
+      },
+    },
+    {
+      id: "burning_marks_the_ground",
+      actionText: "je brule ici",
+      setup: (state) => {
+        if (!groundTarget) return state;
+        return withPlayerAt(state, groundTarget.x, groundTarget.y);
+      },
+      check: ({ next }) => {
+        const out: Finding[] = [];
+        if (!groundTarget) return out;
+        const tile = next.tiles[idxOf(next, groundTarget.x, groundTarget.y)];
+        if (!tile || tile.prop !== "charred") {
+          out.push({
+            severity: "high",
+            scope: "scenario:burning_marks_the_ground",
+            message: `Burning did not leave a charred mark, got ${String(tile?.prop)}.`,
+          });
+        }
+        return out;
+      },
+    },
+    {
       id: "respawn_is_sane",
       actionText: "__direct_apply_respawn__",
       setup: (state) => {
@@ -620,7 +691,7 @@ async function auditScenarioBatch(
       id: "nearby_shop_purchase_costs_once",
       actionText: "j achete potion de soin",
       setup: (state) => {
-        const next = withPlayerAt(state, 26, 23);
+        const next = withPlayerAt(state, 27, 21);
         next.player.gold = 30;
         return next;
       },
@@ -679,7 +750,7 @@ async function auditScenarioBatch(
       id: "invalid_shop_item_is_rejected",
       actionText: "j achete fusil legendaire",
       setup: (state) => {
-        const next = withPlayerAt(state, 26, 23);
+        const next = withPlayerAt(state, 27, 21);
         next.player.gold = 50;
         return next;
       },
@@ -732,6 +803,35 @@ async function auditScenarioBatch(
         damageSelf: 5,
       };
       next = logic.applyOutcome(initialState, outcome);
+    } else if ((scenario.id === "digging_marks_the_ground" || scenario.id === "burning_marks_the_ground") && groundTarget) {
+      const originalRandom = Math.random;
+      Math.random = () => 0.61;
+      try {
+        outcome = await resolveLib.resolveSoloAction({
+          actionText: scenario.actionText,
+          context: logic.buildActionContext(initialState, {
+            type: "context",
+            targetRef: `tile:${groundTarget.x},${groundTarget.y}`,
+            targetTile: groundTarget,
+            source: "mouse",
+          }),
+          state: initialState,
+          interaction: {
+            type: "context",
+            targetRef: `tile:${groundTarget.x},${groundTarget.y}`,
+            targetTile: groundTarget,
+            source: "mouse",
+          },
+        });
+      } finally {
+        Math.random = originalRandom;
+      }
+      next = logic.applyOutcome(initialState, outcome, {
+        type: "context",
+        targetRef: `tile:${groundTarget.x},${groundTarget.y}`,
+        targetTile: groundTarget,
+        source: "mouse",
+      });
     } else {
       const context = logic.buildActionContext(initialState);
       outcome = await resolveActionDeterministic(resolveLib, scenario.actionText, context);
@@ -766,7 +866,7 @@ async function auditFuzzBatch(
 
   const states = [
     base,
-    withPlayerAt(base, 26, 23),
+    withPlayerAt(base, 27, 21),
     withPlayerAt(base, 21, 24),
     withPlayerAt(base, 18, 24),
     withPlayerAt(base, 24, 39),

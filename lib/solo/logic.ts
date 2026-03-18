@@ -1,6 +1,11 @@
 import { resolveItemAsset } from "./assets";
-import { findShopCatalogEntry } from "./shop";
+import { CONFIG } from "./config";
+import { findWorldEntityByRef } from "./interaction";
+import { hydrateSoloState, pushRecentActionSignature } from "./runtime";
+import { findShopCatalogEntry, getShopDiscountPercent, getShopPrice } from "./shop";
 import type {
+  EntityInventoryItem,
+  PlayerInteractionRequest,
   PoiType,
   SoloActionContext,
   SoloGameState,
@@ -9,7 +14,11 @@ import type {
   TerrainChange,
   Tile,
   WorldActor,
+  WorldEntityRef,
+  WorldEntityState,
+  WorldOp,
 } from "./types";
+import { applyWorldTick } from "./worldTick";
 import {
   chunkKey,
   chunkOf,
@@ -21,13 +30,22 @@ import {
   terrainLabel,
 } from "./world";
 
-const MAX_STRESS = 100;
-const MAX_MOVE_TILES_PER_TURN = 10;
-const MAX_POI_PATH_STEPS = 12;
+const MAX_STRESS = CONFIG.player.maxStress;
+const MAX_MOVE_TILES_PER_TURN = CONFIG.player.maxMovePerTurn;
+const MAX_POI_PATH_STEPS = CONFIG.player.maxPoiPathSteps;
 
-export function buildActionContext(state: SoloGameState): SoloActionContext {
+export function buildActionContext(
+  state: SoloGameState,
+  interaction?: PlayerInteractionRequest | null
+): SoloActionContext {
   const playerTile = getTile(state, state.player.x, state.player.y);
   const { cx, cy } = chunkOf(state.player.x, state.player.y);
+  const target =
+    interaction?.primaryTargetRef || interaction?.targetRef
+      ? findWorldEntityByRef(state, interaction?.primaryTargetRef ?? interaction?.targetRef ?? null)
+      : interaction?.targetTile
+        ? findWorldEntityByRef(state, `tile:${interaction.targetTile.x},${interaction.targetTile.y}`)
+        : null;
 
   const nearbyPois = [
     getTile(state, state.player.x, state.player.y)?.poi,
@@ -66,6 +84,20 @@ export function buildActionContext(state: SoloGameState): SoloActionContext {
     lives: state.player.lives,
     gold: state.player.gold,
     strength: state.player.strength,
+    speed: state.player.speed,
+    willpower: state.player.willpower,
+    magic: state.player.magic,
+    aura: state.player.aura,
+    defense: state.player.defense,
+    precision: state.player.precision,
+    evasion: state.player.evasion,
+    perception: state.player.perception,
+    discretion: state.player.discretion,
+    chance: state.player.chance,
+    initiative: state.player.initiative,
+    charisma: state.player.charisma,
+    endurance: state.player.endurance,
+    resonance: state.player.resonance,
     stress: state.player.stress,
     powerText: state.player.powerText,
     powerRoll: state.player.powerRoll,
@@ -89,6 +121,27 @@ export function buildActionContext(state: SoloGameState): SoloActionContext {
       name: item.name,
       qty: item.qty,
     })),
+    target: target
+      ? {
+          ref: target.ref,
+          kind: target.kind,
+          name: target.name,
+          x: target.x,
+          y: target.y,
+          distance: manhattan(target.x, target.y, state.player.x, state.player.y),
+          ownerRef: state.entityStates[target.ref]?.ownerRef ?? null,
+          visibleItems: (state.entityStates[target.ref]?.inventory ?? []).map((item) => item.name).slice(0, 6),
+          equippedItems: Object.values(state.entityStates[target.ref]?.equipment ?? {})
+            .map((itemId) => (state.entityStates[target.ref]?.inventory ?? []).find((item) => item.id === itemId)?.name ?? null)
+            .filter((entry): entry is string => !!entry),
+          accessPolicy: state.entityStates[target.ref]?.accessPolicy ?? null,
+          faction: state.entityStates[target.ref]?.faction ?? null,
+        }
+      : null,
+    factionReputations: { ...state.factionReputations },
+    zoneReputations: { ...state.zoneReputations },
+    followers: state.followers.map((entry) => ({ ...entry })),
+    recentActionSignatures: [...state.recentActionSignatures],
     recentLog: state.log.slice(-10),
   };
 }
@@ -106,35 +159,54 @@ function actorStress(actor: WorldActor): number {
   return clamp(Math.round((actor as { stress?: number }).stress ?? 12), 0, 100);
 }
 
-export function applyOutcome(prev: SoloGameState, outcome: SoloOutcome): SoloGameState {
-  if (prev.status !== "playing") return prev;
+export function applyOutcome(
+  prev: SoloGameState,
+  outcome: SoloOutcome,
+  interaction?: PlayerInteractionRequest | null
+): SoloGameState {
+  const safePrev = hydrateSoloState(prev);
+  if (safePrev.status !== "playing") return safePrev;
 
   const next: SoloGameState = {
-    ...prev,
-    turn: prev.turn + 1,
+    ...safePrev,
+    turn: safePrev.turn + 1,
     player: {
-      ...prev.player,
-      inventory: prev.player.inventory.map((item) => ({ ...item })),
+      ...safePrev.player,
+      inventory: safePrev.player.inventory.map((item) => ({ ...item })),
     },
-    quests: prev.quests.map((quest) => ({ ...quest })),
-    actors: prev.actors.map((actor) => ({ ...actor })),
-    log: [...prev.log],
-    revealedChunks: [...prev.revealedChunks],
-    tiles: prev.tiles,
-    lastAction: outcome.storyLine?.trim() || prev.lastAction,
-    lastNarration: outcome.narrative || prev.lastNarration,
+    quests: safePrev.quests.map((quest) => ({ ...quest })),
+    actors: safePrev.actors.map((actor) => ({ ...actor })),
+    log: [...safePrev.log],
+    revealedChunks: [...safePrev.revealedChunks],
+    tiles: safePrev.tiles,
+    incidents: safePrev.incidents.map((entry) => ({ ...entry })),
+    bounties: safePrev.bounties.map((entry) => ({ ...entry })),
+    followers: safePrev.followers.map((entry) => ({ ...entry })),
+    factionReputations: { ...safePrev.factionReputations },
+    zoneReputations: { ...safePrev.zoneReputations },
+    worldDirector: { ...safePrev.worldDirector },
+    recentActionSignatures: [...safePrev.recentActionSignatures],
+    entityStates: cloneEntityStates(safePrev.entityStates),
+    lastAction: outcome.storyLine?.trim() || safePrev.lastAction,
+    lastNarration: outcome.narrative || safePrev.lastNarration,
   };
 
   let tilesCopied = false;
   const ensureTiles = (): Tile[] => {
     if (!tilesCopied) {
-      next.tiles = [...prev.tiles];
+      next.tiles = [...safePrev.tiles];
       tilesCopied = true;
     }
     return next.tiles;
   };
 
-  if (outcome.moveBy) {
+  if (Array.isArray(outcome.worldOps) && outcome.worldOps.length > 0) {
+    applyWorldOps(next, outcome.worldOps);
+  }
+
+  if (outcome.movePath && outcome.movePath.length > 0) {
+    applyMovePath(next, outcome.movePath);
+  } else if (outcome.moveBy) {
     applyMovement(next, outcome.moveBy.dx, outcome.moveBy.dy);
   }
 
@@ -162,12 +234,14 @@ export function applyOutcome(prev: SoloGameState, outcome: SoloOutcome): SoloGam
     applyDestroy(next, outcome.destroyTarget.dx, outcome.destroyTarget.dy, ensureTiles);
   }
 
-  if (outcome.attackNearestHostile) {
+  if (outcome.attackActorId) {
+    applyAttack(next, outcome.attackPower ?? 7, outcome.diceRoll, outcome.attackActorId);
+  } else if (outcome.attackNearestHostile) {
     applyAttack(next, outcome.attackPower ?? 7, outcome.diceRoll);
   }
 
-  if (outcome.talkToNearestNpc) {
-    applyNpcTalk(next, outcome.npcSpeech);
+  if (outcome.talkToActorId || outcome.talkToNearestNpc) {
+    applyNpcTalk(next, outcome.npcSpeech, outcome.talkToActorId ?? undefined);
   }
 
   if (outcome.requestQuest) {
@@ -180,6 +254,14 @@ export function applyOutcome(prev: SoloGameState, outcome: SoloOutcome): SoloGam
 
   if (outcome.buyItemName) {
     buyInventoryItem(next, outcome.buyItemName, 1);
+  }
+
+  if (outcome.sellItemName) {
+    sellInventoryItem(next, outcome.sellItemName, outcome.sellItemQty ?? 1);
+  }
+
+  if (typeof outcome.setShopDiscountPercent === "number") {
+    next.player.shopDiscountPercent = getShopDiscountPercent(outcome.setShopDiscountPercent);
   }
 
   if (typeof outcome.damageSelf === "number") {
@@ -222,11 +304,24 @@ export function applyOutcome(prev: SoloGameState, outcome: SoloOutcome): SoloGam
     });
   }
 
+  if (interaction?.repeatSignature) {
+    next.recentActionSignatures = pushRecentActionSignature(next.recentActionSignatures, interaction.repeatSignature);
+  }
+
   enforceWorldCoherence(next);
   revealPlayerChunk(next);
   checkTileTriggers(next);
-  checkLifeAndRespawn(next);
   syncQuestProgress(next);
+
+  const tick = applyWorldTick(safePrev, next, outcome, interaction);
+  if ((!outcome.worldEvent || outcome.worldEvent.trim().length === 0) && tick.worldEvent) {
+    outcome.worldEvent = tick.worldEvent;
+  }
+  if (tick.speechBubbles.length > 0) {
+    outcome.speechBubbles = [...(outcome.speechBubbles ?? []), ...tick.speechBubbles];
+  }
+
+  checkLifeAndRespawn(next);
 
   if (typeof outcome.diceRoll === "number") {
     appendLog(next, `SYSTEM: D20 = ${outcome.diceRoll}`);
@@ -241,8 +336,59 @@ export function applyOutcome(prev: SoloGameState, outcome: SoloOutcome): SoloGam
     appendLog(next, "SYSTEM: Quetes principales completees. Victoire.");
   }
 
-  if (next.log.length > 320) {
-    next.log = next.log.slice(-260);
+  if (next.log.length > CONFIG.log.maxEntries) {
+    next.log = next.log.slice(-CONFIG.log.trimTo);
+  }
+
+  return next;
+}
+
+export function applyFreeMoveStep(
+  prev: SoloGameState,
+  step: { x: number; y: number }
+): SoloGameState {
+  const safePrev = hydrateSoloState(prev);
+  if (safePrev.status !== "playing") return safePrev;
+  if (!step || !Number.isFinite(step.x) || !Number.isFinite(step.y)) return safePrev;
+  if (!inBounds(step.x, step.y)) return safePrev;
+  if (manhattan(step.x, step.y, safePrev.player.x, safePrev.player.y) !== 1) return safePrev;
+
+  const tile = safePrev.tiles[idxOf(step.x, step.y)];
+  if (!tile || tile.blocked) return safePrev;
+  const occupied = safePrev.actors.some((actor) => actor.alive && actor.x === step.x && actor.y === step.y);
+  if (occupied) return safePrev;
+
+  const next: SoloGameState = {
+    ...safePrev,
+    player: {
+      ...safePrev.player,
+      inventory: safePrev.player.inventory.map((item) => ({ ...item })),
+      x: step.x,
+      y: step.y,
+    },
+    quests: safePrev.quests.map((quest) => ({ ...quest })),
+    actors: safePrev.actors.map((actor) => ({ ...actor })),
+    log: [...safePrev.log],
+    revealedChunks: [...safePrev.revealedChunks],
+    incidents: safePrev.incidents.map((entry) => ({ ...entry })),
+    bounties: safePrev.bounties.map((entry) => ({ ...entry })),
+    followers: safePrev.followers.map((entry) => ({ ...entry })),
+    factionReputations: { ...safePrev.factionReputations },
+    zoneReputations: { ...safePrev.zoneReputations },
+    worldDirector: { ...safePrev.worldDirector },
+    recentActionSignatures: [...safePrev.recentActionSignatures],
+    entityStates: cloneEntityStates(safePrev.entityStates),
+    lastAction: "Deplacement",
+    lastNarration: "Tu avances d une case.",
+  };
+
+  revealPlayerChunk(next);
+  checkTileTriggers(next);
+  applyImmediateThreatReaction(next);
+  checkLifeAndRespawn(next);
+
+  if (next.log.length > CONFIG.log.maxEntries) {
+    next.log = next.log.slice(-CONFIG.log.trimTo);
   }
 
   return next;
@@ -272,6 +418,23 @@ function applyMovement(state: SoloGameState, rawDx: number, rawDy: number): void
     const tile = state.tiles[idxOf(nx, ny)];
     if (!tile || tile.blocked) break;
     state.player.y = ny;
+  }
+}
+
+function applyMovePath(state: SoloGameState, path: Array<{ x: number; y: number }>): void {
+  let remaining = MAX_MOVE_TILES_PER_TURN;
+  for (const step of path) {
+    if (remaining <= 0) break;
+    if (!inBounds(step.x, step.y)) break;
+    const distance = manhattan(step.x, step.y, state.player.x, state.player.y);
+    if (distance !== 1) break;
+    const tile = state.tiles[idxOf(step.x, step.y)];
+    if (!tile || tile.blocked) break;
+    const occupied = state.actors.some((actor) => actor.alive && actor.x === step.x && actor.y === step.y);
+    if (occupied) break;
+    state.player.x = step.x;
+    state.player.y = step.y;
+    remaining -= 1;
   }
 }
 
@@ -328,10 +491,18 @@ function applyDestroy(
   };
 }
 
-function applyAttack(state: SoloGameState, rawPower: number, roll: number | null): void {
-  let targetIndex = nearestHostileIndex(state, 3);
+function applyAttack(
+  state: SoloGameState,
+  rawPower: number,
+  roll: number | null,
+  targetActorId?: string
+): void {
+  let targetIndex =
+    typeof targetActorId === "string"
+      ? state.actors.findIndex((actor) => actor.id === targetActorId && actor.alive)
+      : nearestHostileIndex(state, 3);
   if (targetIndex < 0) {
-    targetIndex = nearestAttackableIndex(state, 2);
+    targetIndex = nearestHostileIndex(state, 2);
   }
   if (targetIndex < 0) {
     const approachSteps =
@@ -341,49 +512,39 @@ function applyAttack(state: SoloGameState, rawPower: number, roll: number | null
       targetIndex = nearestHostileIndex(state, 2);
     }
     if (targetIndex < 0) {
-      targetIndex = nearestAttackableIndex(state, 3);
-      if (targetIndex < 0) {
-        appendLog(state, "SYSTEM: Aucune cible a portee.");
-        return;
-      }
+      appendLog(state, "SYSTEM: Aucune cible a portee.");
+      return;
     }
   }
 
-  const power = clamp(Math.round(rawPower) + Math.floor(state.player.strength / 3), 1, 99);
+  const targetDistance = manhattan(state.actors[targetIndex].x, state.actors[targetIndex].y, state.player.x, state.player.y);
+  if (targetDistance > 1) {
+    appendLog(state, "SYSTEM: La cible est encore hors de portee.");
+    return;
+  }
+
+  const power = clamp(Math.round(rawPower) + Math.floor(state.player.strength / CONFIG.combat.strengthDivisor), 1, 99);
   const actor = state.actors[targetIndex];
   actor.hp -= power;
 
   if (actor.hp <= 0) {
     actor.hp = 0;
     actor.alive = false;
-    state.player.gold += actor.kind === "boss" ? 40 : 8;
-    state.player.stress = Math.max(0, state.player.stress - 8);
+    state.player.gold += actor.kind === "boss" ? CONFIG.combat.bossCompletionGold : CONFIG.combat.regularEnemyGold;
+    state.player.stress = Math.max(0, state.player.stress - CONFIG.combat.stressReliefOnKill);
     appendLog(state, `SYSTEM: ${actor.name} est vaincu.`);
-  } else if (typeof roll === "number" && roll <= 5) {
-    state.player.hp = Math.max(0, state.player.hp - 2);
-    state.player.stress = clamp(state.player.stress + 6, 0, MAX_STRESS);
+  } else if (typeof roll === "number" && roll <= CONFIG.combat.failedAttackRollThreshold) {
+    state.player.hp = Math.max(0, state.player.hp - CONFIG.combat.damageOnFailedAttack);
+    state.player.stress = clamp(state.player.stress + CONFIG.combat.stressGainOnHit, 0, MAX_STRESS);
   }
 }
 
-function nearestAttackableIndex(state: SoloGameState, range: number): number {
-  let bestIndex = -1;
-  let bestDistance = Number.POSITIVE_INFINITY;
-  for (let i = 0; i < state.actors.length; i += 1) {
-    const actor = state.actors[i];
-    if (!actor.alive || !actor.hostile) continue;
-    const distance = manhattan(actor.x, actor.y, state.player.x, state.player.y);
-    if (distance > range) continue;
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      bestIndex = i;
-    }
-  }
-  return bestIndex;
-}
-
-function applyNpcTalk(state: SoloGameState, forcedSpeech?: string | null): void {
-  const nearest = nearestNpc(state, 3);
-  if (!nearest) {
+function applyNpcTalk(state: SoloGameState, forcedSpeech?: string | null, actorId?: string): void {
+  const speaker =
+    typeof actorId === "string"
+      ? state.actors.find((actor) => actor.id === actorId && actor.alive && !actor.hostile) ?? null
+      : nearestNpc(state, 3);
+  if (!speaker) {
     appendLog(state, "SYSTEM: Aucun PNJ assez proche pour discuter.");
     return;
   }
@@ -391,13 +552,13 @@ function applyNpcTalk(state: SoloGameState, forcedSpeech?: string | null): void 
   const line =
     forcedSpeech && forcedSpeech.trim().length > 0
       ? forcedSpeech.trim()
-      : nearest.dialogue[Math.floor(Math.random() * nearest.dialogue.length)] ||
+      : speaker.dialogue[Math.floor(Math.random() * speaker.dialogue.length)] ||
         "Le PNJ te regarde en silence.";
-  appendLog(state, `${nearest.name}: ${line}`);
+  appendLog(state, `${speaker.name}: ${line}`);
 
-  if (nearest.id === "npc_innkeeper") {
-    state.player.stress = Math.max(0, state.player.stress - 12);
-    state.player.hp = clamp(state.player.hp + 2, 0, state.player.maxHp);
+  if (speaker.id === "npc_innkeeper") {
+    state.player.stress = Math.max(0, state.player.stress - CONFIG.inn.stressReliefOnTalk);
+    state.player.hp = clamp(state.player.hp + CONFIG.inn.healOnTalk, 0, state.player.maxHp);
   }
 }
 
@@ -432,7 +593,8 @@ function buyInventoryItem(state: SoloGameState, name: string, qty: number): void
   }
 
   const quantity = Math.max(1, Math.round(qty));
-  const totalCost = entry.price * quantity;
+  const unitPrice = getShopPrice(entry, state.player.shopDiscountPercent);
+  const totalCost = unitPrice * quantity;
   if (state.player.gold < totalCost) {
     appendLog(state, `SYSTEM: Pas assez d or (cout ${totalCost}).`);
     return;
@@ -440,7 +602,38 @@ function buyInventoryItem(state: SoloGameState, name: string, qty: number): void
 
   state.player.gold -= totalCost;
   addInventoryItem(state, entry.name, quantity);
-  appendLog(state, `SYSTEM: Achat de ${entry.name} x${quantity}.`);
+  appendLog(state, `SYSTEM: Achat de ${entry.name} x${quantity} (${unitPrice} or l unite).`);
+}
+
+function sellInventoryItem(state: SoloGameState, rawName: string, qty: number): void {
+  if (!isNearPoi(state, "shop", 1)) {
+    appendLog(state, "SYSTEM: Ventes possibles uniquement a la boutique.");
+    return;
+  }
+
+  const found = findInventoryItemEntry(state, rawName);
+  if (!found) {
+    appendLog(state, "SYSTEM: Tu ne possedes pas cet objet.");
+    return;
+  }
+
+  const quantity = clamp(Math.max(1, Math.round(qty)), 1, found.qty);
+  const catalogEntry = findShopCatalogEntry(found.name);
+  const unitPrice = catalogEntry ? Math.max(1, Math.floor(catalogEntry.price * CONFIG.shop.defaultResalePercent / 100)) : found.sprite ? CONFIG.shop.fallbackSellPriceWithSprite : CONFIG.shop.fallbackSellPriceNoSprite;
+  const totalGain = unitPrice * quantity;
+
+  found.qty -= quantity;
+  if (found.qty <= 0) {
+    state.player.inventory = state.player.inventory.filter((entry) => entry.id !== found.id);
+    if (state.player.equippedItemId === found.id) {
+      state.player.equippedItemId = null;
+      state.player.equippedItemName = null;
+      state.player.equippedItemSprite = null;
+    }
+  }
+
+  state.player.gold += totalGain;
+  appendLog(state, `SYSTEM: Vente de ${found.name} x${quantity}. +${totalGain} or.`);
 }
 
 function moveTowardPoi(state: SoloGameState, poi: Exclude<PoiType, null>, steps: number): void {
@@ -510,8 +703,49 @@ function spawnRelativeActor(state: SoloGameState, spawn: SpawnActor): void {
     sprite: spawn.sprite,
     face: spawn.face,
     dialogue: spawn.hostile ? [] : ["Bonjour aventurier."],
+    faction: spawn.faction,
+    role: spawn.role,
+    profession: spawn.profession,
+    personality: spawn.personality,
+    loreSummary: spawn.loreSummary,
+    recruitmentEligible: spawn.recruitmentEligible,
+    recruitmentMode: spawn.recruitmentMode,
+    strength: spawn.strength,
+    speed: spawn.speed,
+    willpower: spawn.willpower,
+    magic: spawn.magic,
+    aura: spawn.aura,
+    defense: spawn.defense,
+    precision: spawn.precision,
+    evasion: spawn.evasion,
+    perception: spawn.perception,
+    discretion: spawn.discretion,
+    chance: spawn.chance,
+    initiative: spawn.initiative,
+    charisma: spawn.charisma,
+    endurance: spawn.endurance,
+    resonance: spawn.resonance,
+    combatLevel: spawn.combatLevel,
     patrol: { axis: "x", range: 0.6, speed: 0.8, phase: state.turn % 7 },
   });
+}
+
+function findInventoryItemEntry(state: SoloGameState, rawName: string) {
+  const normalized = normalizeName(rawName);
+  if (!normalized) return null;
+
+  let best: SoloGameState["player"]["inventory"][number] | null = null;
+  let bestScore = 0;
+  for (const entry of state.player.inventory) {
+    const entryName = normalizeName(entry.name);
+    const score =
+      normalized === entryName ? 5 : entryName.includes(normalized) || normalized.includes(entryName) ? 2 : 0;
+    if (score > bestScore) {
+      best = entry;
+      bestScore = score;
+    }
+  }
+  return bestScore > 0 ? best : null;
 }
 
 function checkTileTriggers(state: SoloGameState): void {
@@ -519,7 +753,7 @@ function checkTileTriggers(state: SoloGameState): void {
   if (!tile) return;
 
   if (tile.poi === "inn") {
-    state.player.stress = Math.max(0, state.player.stress - 2);
+    state.player.stress = Math.max(0, state.player.stress - CONFIG.inn.stressReliefOnVisit);
   }
 
   if (tile.poi === "dungeon_gate") {
@@ -565,9 +799,9 @@ function updateRank(state: SoloGameState): void {
   const completed = state.quests.filter((quest) => quest.done).length;
   const previous = state.player.rank;
   let next = previous;
-  if (completed >= 3) next = "S";
-  else if (completed >= 2) next = "A";
-  else if (completed >= 1) next = "B";
+  if (completed >= CONFIG.rank.thresholds.S) next = "S";
+  else if (completed >= CONFIG.rank.thresholds.A) next = "A";
+  else if (completed >= CONFIG.rank.thresholds.B) next = "B";
   else next = "C";
 
   if (next !== previous) {
@@ -588,16 +822,16 @@ function checkLifeAndRespawn(state: SoloGameState): void {
     return;
   }
 
-  const lostGold = Math.floor(state.player.gold * 0.5);
+  const lostGold = Math.floor(state.player.gold * CONFIG.player.deathGoldLossPercent / 100);
   state.player.gold -= lostGold;
   state.player.inventory = [];
   state.player.equippedItemId = null;
   state.player.equippedItemName = null;
   state.player.equippedItemSprite = null;
   state.player.hp = state.player.maxHp;
-  state.player.stress = Math.max(0, state.player.stress - 15);
-  state.player.x = 24;
-  state.player.y = 25;
+  state.player.stress = Math.max(0, state.player.stress - CONFIG.player.deathStressRelief);
+  state.player.x = CONFIG.player.respawnPosition.x;
+  state.player.y = CONFIG.player.respawnPosition.y;
   appendLog(state, `SYSTEM: Respawn au camp. Vie restante: ${state.player.lives}. Tu perds ${lostGold} or.`);
 }
 
@@ -608,6 +842,16 @@ function revealPlayerChunk(state: SoloGameState): void {
     state.revealedChunks.push(key);
     appendLog(state, `SYSTEM: Nouvelle zone decouverte (${cx},${cy}).`);
   }
+}
+
+function applyImmediateThreatReaction(state: SoloGameState): void {
+  const hostileIndex = nearestHostileIndex(state, 1);
+  if (hostileIndex < 0) return;
+  const actor = state.actors[hostileIndex];
+  const damage = clamp(Math.round(((actor.strength ?? actor.maxHp / 2 + 4) + (actor.combatLevel ?? 4)) / 14), 1, actor.kind === "boss" ? 4 : 2);
+  state.player.hp = Math.max(0, state.player.hp - damage);
+  state.player.stress = clamp(state.player.stress + 3, 0, MAX_STRESS);
+  appendLog(state, `ENNEMI: ${actor.name} profite de ta proximite (${damage}).`);
 }
 
 function nearestHostileIndex(state: SoloGameState, range: number): number {
@@ -812,8 +1056,184 @@ function manhattan(ax: number, ay: number, bx: number, by: number): number {
   return Math.abs(ax - bx) + Math.abs(ay - by);
 }
 
+function cloneEntityStates(
+  states: Record<WorldEntityRef, WorldEntityState>
+): Record<WorldEntityRef, WorldEntityState> {
+  const next: Record<WorldEntityRef, WorldEntityState> = {};
+  for (const [ref, entry] of Object.entries(states)) {
+    next[ref] = {
+      ...entry,
+      inventory: entry.inventory.map((item) => ({ ...item, tags: item.tags ? [...item.tags] : [] })),
+      equipment: { ...entry.equipment },
+      tags: [...entry.tags],
+      states: [...entry.states],
+      accessPolicy: entry.accessPolicy ? { ...entry.accessPolicy } : null,
+    };
+  }
+  return next;
+}
+
+function getOrCreateEntityState(state: SoloGameState, ref: WorldEntityRef): WorldEntityState {
+  const existing = state.entityStates[ref];
+  if (existing) return existing;
+  const created: WorldEntityState = {
+    ref,
+    ownerRef: null,
+    faction: null,
+    inventory: [],
+    equipment: {},
+    tags: [],
+    states: [],
+    witnessRange: 0,
+    accessPolicy: null,
+  };
+  state.entityStates[ref] = created;
+  return created;
+}
+
+function findEntityInventoryEntry(state: WorldEntityState, rawName: string): EntityInventoryItem | null {
+  const normalizedNeedle = normalizeName(rawName);
+  if (!normalizedNeedle) return null;
+  let best: EntityInventoryItem | null = null;
+  let bestScore = 0;
+  for (const item of state.inventory) {
+    const normalizedItem = normalizeName(item.name);
+    const score =
+      normalizedItem === normalizedNeedle
+        ? 5
+        : normalizedItem.includes(normalizedNeedle) || normalizedNeedle.includes(normalizedItem)
+          ? 2
+          : 0;
+    if (score > bestScore) {
+      best = item;
+      bestScore = score;
+    }
+  }
+  return bestScore > 0 ? best : null;
+}
+
+function addEntityInventoryItem(state: SoloGameState, ref: WorldEntityRef, name: string, qty: number): void {
+  const entity = getOrCreateEntityState(state, ref);
+  const asset = resolveItemAsset(name);
+  const existing = entity.inventory.find((item) => item.name === asset.name);
+  if (existing) {
+    existing.qty += Math.max(1, Math.round(qty));
+    return;
+  }
+  entity.inventory.push({
+    id: `${ref}_${asset.id}`,
+    itemId: asset.itemId,
+    name: asset.name,
+    qty: Math.max(1, Math.round(qty)),
+    icon: asset.icon,
+    sprite: asset.sprite,
+    emoji: asset.emoji,
+    ownerRef: ref,
+    equippedSlot: null,
+    tags: [],
+  });
+}
+
+function removeEntityInventoryItem(state: SoloGameState, ref: WorldEntityRef, name: string, qty: number): boolean {
+  const entity = getOrCreateEntityState(state, ref);
+  const item = findEntityInventoryEntry(entity, name);
+  if (!item) return false;
+  const quantity = clamp(Math.max(1, Math.round(qty)), 1, item.qty);
+  item.qty -= quantity;
+  if (item.qty <= 0) {
+    entity.inventory = entity.inventory.filter((entry) => entry.id !== item.id);
+    for (const [slot, itemId] of Object.entries(entity.equipment)) {
+      if (itemId === item.id) {
+        delete entity.equipment[slot as keyof typeof entity.equipment];
+      }
+    }
+  }
+  return true;
+}
+
+function removePlayerInventoryItem(state: SoloGameState, rawName: string, qty: number): boolean {
+  const found = findInventoryItemEntry(state, rawName);
+  if (!found) return false;
+  const quantity = clamp(Math.max(1, Math.round(qty)), 1, found.qty);
+  found.qty -= quantity;
+  if (found.qty <= 0) {
+    state.player.inventory = state.player.inventory.filter((entry) => entry.id !== found.id);
+    if (state.player.equippedItemId === found.id) {
+      state.player.equippedItemId = null;
+      state.player.equippedItemName = null;
+      state.player.equippedItemSprite = null;
+    }
+  }
+  return true;
+}
+
+function applyWorldOps(state: SoloGameState, ops: WorldOp[]): void {
+  for (const op of ops) {
+    if (op.type === "move_path") {
+      applyMovePath(state, op.path);
+      continue;
+    }
+
+    if (op.type === "adjust_player_gold") {
+      state.player.gold = Math.max(0, state.player.gold + Math.round(op.delta));
+      continue;
+    }
+
+    if (op.type === "set_shop_discount") {
+      state.player.shopDiscountPercent = getShopDiscountPercent(op.percent);
+      continue;
+    }
+
+    if (op.type === "transfer_item") {
+      const quantity = Math.max(1, Math.round(op.qty));
+      let transferred = true;
+      if (op.fromRef && op.fromRef !== "player:self") {
+        transferred = removeEntityInventoryItem(state, op.fromRef, op.itemName, quantity);
+      } else if (op.fromRef === "player:self") {
+        transferred = removePlayerInventoryItem(state, op.itemName, quantity);
+      }
+
+      if (!transferred && !op.createIfMissing) {
+        continue;
+      }
+
+      if (op.toRef === "player:self") {
+        addInventoryItem(state, op.itemName, quantity);
+      } else {
+        addEntityInventoryItem(state, op.toRef, op.itemName, quantity);
+      }
+      continue;
+    }
+
+    if (op.type === "record_incident") {
+      state.incidents.push({
+        ...op.incident,
+        id: op.incident.id || `incident_${state.turn}_${state.incidents.length + 1}`,
+        createdTurn: op.incident.createdTurn ?? state.turn,
+      });
+      continue;
+    }
+
+    if (op.type === "set_entity_state") {
+      const entity = getOrCreateEntityState(state, op.ref);
+      if (op.tags) entity.tags = [...op.tags];
+      if (op.states) entity.states = [...op.states];
+    }
+  }
+}
+
 function appendLog(state: SoloGameState, line: string): void {
   state.log.push(line);
+}
+
+function normalizeName(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9 ]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function clamp(value: number, min: number, max: number): number {

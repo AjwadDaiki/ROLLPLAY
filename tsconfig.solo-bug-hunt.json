@@ -9,6 +9,6 @@
     "incremental": false,
     "allowJs": false
   },
-  "include": ["scripts/solo-bug-hunt.ts", "lib/solo/**/*.ts"],
+  "include": ["scripts/solo-bug-hunt.ts", "scripts/sandbox-generalization-check.ts", "lib/solo/**/*.ts"],
   "exclude": ["node_modules", ".next", ".codex-solo-bug-hunt"]
 }

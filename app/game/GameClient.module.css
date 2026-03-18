@@ -2,9 +2,9 @@
   height: 100dvh;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: 12px;
-  padding: 14px;
-  width: min(1520px, 100%);
+  gap: 8px;
+  padding: 8px;
+  width: min(1760px, 100%);
   margin-inline: auto;
   overflow: hidden;
   background:
@@ -50,15 +50,15 @@
 }
 
 .topPanel {
-  border-radius: 14px;
+  border-radius: 12px;
   border: 1px solid rgba(236, 196, 112, 0.44);
   background:
     linear-gradient(180deg, rgba(16, 23, 40, 0.96), rgba(10, 16, 28, 0.92)),
     radial-gradient(circle at top left, rgba(240, 196, 108, 0.14), transparent 34%);
-  padding: 12px 14px;
+  padding: 8px 10px;
   display: grid;
-  grid-template-columns: minmax(300px, 360px) minmax(280px, 1fr) minmax(340px, 1.15fr);
-  gap: 14px;
+  grid-template-columns: minmax(230px, 290px) minmax(0, 1fr) minmax(250px, 320px);
+  gap: 8px;
   align-items: center;
   box-shadow: 0 18px 34px rgba(0, 0, 0, 0.18);
 }
@@ -67,13 +67,13 @@
   display: grid;
   grid-template-columns: auto 1fr;
   align-items: start;
-  gap: 12px;
+  gap: 10px;
 }
 
 .playerFace {
-  width: 52px;
-  height: 52px;
-  border-radius: 10px;
+  width: 46px;
+  height: 46px;
+  border-radius: 9px;
   image-rendering: pixelated;
   border: 1px solid rgba(244, 203, 119, 0.48);
   background: rgba(14, 21, 37, 0.9);
@@ -82,7 +82,23 @@
 .playerMeta {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 3px;
+}
+
+.playerTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.turnBadge {
+  border-radius: 999px;
+  border: 1px solid rgba(240, 197, 107, 0.5);
+  background: rgba(42, 31, 12, 0.9);
+  color: #ffe4ad;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 800;
 }
 
 .playerMeta strong {
@@ -91,7 +107,7 @@
 
 .playerMeta small {
   color: #aab8dc;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .hearts {
@@ -113,19 +129,19 @@
 .lifeRow {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .lifeText {
   color: #f4d89f;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
 }
 
 .vitalMeter,
 .stressMeter {
   display: grid;
-  gap: 4px;
+  gap: 3px;
 }
 
 .vitalMeter span,
@@ -138,7 +154,7 @@
 .vitalMeterTrack,
 .stressMeterTrack {
   position: relative;
-  height: 10px;
+  height: 8px;
   border-radius: 999px;
   overflow: hidden;
   border: 1px solid rgba(162, 184, 225, 0.32);
@@ -150,6 +166,11 @@
   border-radius: inherit;
   background: linear-gradient(90deg, #f16f67 0%, #ffba7d 100%);
   box-shadow: 0 0 14px rgba(241, 111, 103, 0.34);
+}
+
+.vitalMeter[data-damaged="1"] .vitalMeterFill,
+.stressMeter[data-damaged="1"] .stressMeterFill {
+  animation: hudPulse 320ms ease-out 2;
 }
 
 .stressMeterFill {
@@ -168,24 +189,27 @@
 }
 
 .statsRow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
   align-content: center;
 }
 
 .statsRow > div {
-  border-radius: 16px;
+  border-radius: 14px;
   border: 1px solid rgba(221, 181, 98, 0.48);
   background:
     linear-gradient(180deg, rgba(24, 34, 56, 0.95), rgba(16, 24, 41, 0.9)),
     radial-gradient(circle at top left, rgba(255, 227, 163, 0.12), transparent 38%);
-  padding: 8px 13px;
-  display: inline-flex;
+  padding: 6px 10px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas:
+    "icon label"
+    "icon value";
   align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  font-weight: 700;
+  column-gap: 6px;
+  row-gap: 1px;
   color: #f4f7ff;
   box-shadow: inset 0 0 0 1px rgba(95, 126, 194, 0.18);
 }
@@ -195,57 +219,80 @@
 }
 
 .statsRow img {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   image-rendering: pixelated;
+  grid-area: icon;
+}
+
+.statsRow > div small {
+  grid-area: label;
+  color: #9cb0db;
+  font-size: 10px;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.statsRow > div strong {
+  grid-area: value;
+  color: #f3f6ff;
+  font-size: 13px;
+  line-height: 1.1;
 }
 
 .objective {
-  border-radius: 14px;
+  border-radius: 12px;
   border: 1px solid rgba(145, 165, 211, 0.42);
   background:
     linear-gradient(180deg, rgba(18, 28, 48, 0.96), rgba(12, 20, 35, 0.9)),
     radial-gradient(circle at top right, rgba(242, 198, 106, 0.12), transparent 34%);
-  padding: 12px;
+  padding: 8px 10px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 5px;
 }
 
 .objective small {
   color: #8fa4d2;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .objective strong {
   color: #ffe2ab;
-  line-height: 1.35;
-  font-size: 15px;
+  line-height: 1.25;
+  font-size: 14px;
 }
 
 .objectiveDetail {
-  border-radius: 10px;
+  border-radius: 9px;
   border: 1px solid rgba(136, 159, 206, 0.24);
   background: rgba(10, 18, 31, 0.78);
-  padding: 8px 9px;
+  padding: 6px 8px;
   display: grid;
-  gap: 3px;
+  gap: 2px;
+}
+
+.objectiveHint {
+  color: #c9d7f4;
+  font-size: 11px;
+  line-height: 1.25;
 }
 
 .objectiveDetail span {
   color: #8fa4d2;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 700;
 }
 
 .objectiveDetail p {
   color: #dde6fb;
-  font-size: 13px;
-  line-height: 1.4;
+  font-size: 12px;
+  line-height: 1.3;
 }
 
 .objectiveActions {
@@ -254,12 +301,13 @@
 }
 
 .objectiveActions button {
-  height: 34px;
-  border-radius: 10px;
+  height: 30px;
+  border-radius: 9px;
   border: 1px solid rgba(242, 198, 106, 0.64);
   background: rgba(44, 34, 13, 0.88);
   color: #ffe5b0;
-  padding: 0 12px;
+  padding: 0 10px;
+  font-size: 12px;
   font-weight: 800;
   cursor: pointer;
 }
@@ -272,8 +320,8 @@
 .mainZone {
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 360px);
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 315px);
+  gap: 8px;
   align-items: stretch;
 }
 
@@ -289,8 +337,8 @@
   min-height: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  gap: 9px;
-  padding: 10px;
+  gap: 8px;
+  padding: 8px;
   overflow: hidden;
   position: relative;
 }
@@ -349,8 +397,8 @@
 }
 
 .canvas {
-  width: min(100%, 72dvh, 840px);
-  max-height: 72dvh;
+  width: min(100%, 81dvh, 1040px);
+  max-height: 81dvh;
   aspect-ratio: 1 / 1;
   border-radius: 12px;
   border: 1px solid rgba(146, 166, 214, 0.45);
@@ -359,6 +407,12 @@
   margin-inline: auto;
   align-self: center;
   box-shadow: 0 18px 42px rgba(0, 0, 0, 0.28);
+}
+
+.canvasHint {
+  color: #9db2df;
+  font-size: 12px;
+  text-align: center;
 }
 
 .combatWheelOverlay {
@@ -372,20 +426,45 @@
 }
 
 .combatWheelCard {
-  width: min(420px, calc(100% - 36px));
-  border-radius: 14px;
+  width: min(560px, calc(100% - 28px));
+  border-radius: 16px;
   border: 1px solid rgba(241, 199, 110, 0.72);
   background: rgba(10, 16, 29, 0.94);
   box-shadow: 0 24px 54px rgba(0, 0, 0, 0.45);
-  padding: 12px;
+  padding: 14px;
   display: grid;
-  gap: 8px;
+  gap: 10px;
 }
 
 .combatWheelHead {
   color: #ffe4ad;
   font-weight: 800;
-  font-size: 15px;
+  font-size: 18px;
+}
+
+.combatCommandStrip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.combatCommandChip {
+  min-height: 32px;
+  border-radius: 999px;
+  border: 1px solid rgba(147, 168, 214, 0.42);
+  background: rgba(16, 25, 43, 0.86);
+  color: #cbd8f5;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.combatCommandChip[data-active="1"] {
+  border-color: rgba(242, 198, 106, 0.76);
+  color: #ffe2a9;
+  background: rgba(47, 34, 13, 0.9);
 }
 
 .combatWheelStats {
@@ -394,23 +473,38 @@
   gap: 8px;
 }
 
-.combatWheelStats > div {
+.combatStatPanel {
   border-radius: 10px;
   border: 1px solid rgba(152, 172, 220, 0.34);
   background: rgba(8, 14, 25, 0.74);
   padding: 8px;
   display: grid;
-  gap: 2px;
+  gap: 4px;
 }
 
-.combatWheelStats strong {
+.combatStatPanel strong {
   color: #f2f6ff;
-  font-size: 13px;
+  font-size: 14px;
 }
 
-.combatWheelStats small {
+.combatStatPanel small {
   color: #b9c8eb;
   font-size: 11px;
+}
+
+.combatHpBar {
+  height: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid rgba(141, 163, 209, 0.34);
+  background: rgba(8, 13, 24, 0.92);
+}
+
+.combatHpFill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #f26767 0%, #f6cf7f 100%);
+  box-shadow: 0 0 18px rgba(242, 111, 103, 0.34);
 }
 
 .combatWheelWrap {
@@ -822,7 +916,7 @@
 }
 
 .contextCard {
-  width: min(480px, 94vw);
+  width: min(680px, 94vw);
   border-radius: 14px;
   border: 1px solid rgba(241, 199, 110, 0.66);
   background: rgba(13, 20, 33, 0.96);
@@ -971,6 +1065,88 @@
   cursor: not-allowed;
 }
 
+.dialogActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dialogChip {
+  min-height: 34px;
+  border-radius: 999px;
+  border: 1px solid rgba(151, 171, 220, 0.42);
+  background: rgba(20, 31, 50, 0.92);
+  color: #dbe6ff;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.activeChip {
+  border-color: rgba(242, 198, 105, 0.74);
+  color: #ffe2a7;
+}
+
+.dialogInfoPanel {
+  border-radius: 10px;
+  border: 1px solid rgba(151, 171, 220, 0.28);
+  background: rgba(10, 16, 28, 0.78);
+  padding: 10px;
+  display: grid;
+  gap: 4px;
+}
+
+.dialogInfoPanel p {
+  color: #d9e6ff;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.dialogTradeGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.dialogInput {
+  min-height: 110px;
+  border-radius: 10px;
+  border: 1px solid rgba(151, 171, 220, 0.48);
+  background: rgba(12, 18, 31, 0.94);
+  color: #edf3ff;
+  padding: 10px 12px;
+  resize: vertical;
+  font: inherit;
+}
+
+.dialogInput:focus {
+  outline: none;
+  border-color: rgba(242, 198, 106, 0.8);
+  box-shadow: 0 0 0 3px rgba(242, 198, 106, 0.14);
+}
+
+.dialogFooter {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.dialogFooter button {
+  min-width: 120px;
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid rgba(242, 198, 106, 0.72);
+  background: linear-gradient(180deg, #f2c66a 0%, #cc9a47 100%);
+  color: #241c0e;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.dialogFooter button:disabled {
+  opacity: 0.56;
+  cursor: not-allowed;
+}
+
 .overlayCard {
   width: min(460px, 92vw);
   border-radius: 14px;
@@ -1099,6 +1275,21 @@
   }
 }
 
+@keyframes hudPulse {
+  0% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  40% {
+    transform: scale(1.03);
+    filter: brightness(1.22);
+  }
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+}
+
 @keyframes lootPop {
   0% {
     opacity: 0;
@@ -1123,7 +1314,15 @@
     grid-template-columns: 1fr;
   }
 
+  .statsRow {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .mainZone {
+    grid-template-columns: 1fr;
+  }
+
+  .dialogTradeGrid {
     grid-template-columns: 1fr;
   }
 

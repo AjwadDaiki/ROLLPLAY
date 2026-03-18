@@ -16,11 +16,35 @@ Le jeu doit etre beau, mais surtout comprehensible, fluide et intuitif.
 
 ---
 
+## Pivot UX 2026-03-18
+
+Le jeu ne doit plus donner l impression que le joueur parle d abord a une console.  
+La scene doit devenir l interface principale.
+
+Direction validee:
+
+- le joueur se deplace avec clavier/souris,
+- clic gauche = mouvement / selection,
+- clic droit = interaction contextuelle,
+- deplacement strictement orthogonal case par case,
+- survol souris = chemin reel affiche avant validation,
+- un popup permet d ecrire librement l intention sur une cible ou une case,
+- des bulles locales rendent l action visible dans la scene,
+- le panneau `Narrateur MJ` reste a droite comme historique et narration persistante.
+
+Consequence UX:
+
+- le champ texte du bas ne doit plus etre pense comme un chat principal,
+- il doit devenir un composeur contextuel ou une zone d aide,
+- la comprehension du jeu doit venir d abord du monde visible.
+
+---
+
 ## Diagnostic Actuel
 
 ### Ce qui fonctionne deja
 
-- La structure generale est bonne: HUD en haut, map au centre, narration a droite, input en bas.
+- La structure generale est bonne: HUD en haut, map au centre, narration a droite.
 - Le style visuel a une identite correcte: fantasy pixel-art, ambiance nocturne, tons or/bleu.
 - Les panels contextuels boutique/guilde existent deja.
 - Les feedbacks de base existent: D20, loot popup, gain/perte d or, ecran victoire/defaite.
@@ -34,7 +58,7 @@ Le jeu doit etre beau, mais surtout comprehensible, fluide et intuitif.
 - L interface de stats est correcte, mais pas encore assez elegante ni assez hierarchisee.
 - Les evenements graves ou rares ne prennent pas assez de place visuelle.
 - Les consequences sont parfois trop textuelles et pas assez theatrales.
-- Le champ de saisie laisse le joueur libre, mais ne l aide pas assez a comprendre comment "bien jouer" avec le moteur.
+- Le champ de saisie laisse le joueur libre, mais il reste trop desincarne et trop central.
 - Le journal et l objectif ne transforment pas encore la confusion en direction.
 
 Conclusion: le jeu a deja une base jouable, mais il lui manque une couche UX de clarification, de mise en scene et de guidance.
@@ -47,7 +71,7 @@ Le joueur doit ressentir ceci:
 
 1. `Je comprends instantanement ou je suis.`
 2. `Je vois clairement ce qui est important autour de moi.`
-3. `Quand j ecris une action, je comprends ce que le jeu a interprete.`
+3. `Quand j interagis avec quelque chose, je comprends ce que le jeu a interprete.`
 4. `Quand quelque chose d important arrive, le jeu me le fait ressentir visuellement.`
 5. `Chaque zone a sa logique, sa lisibilite et sa personnalite.`
 
@@ -139,6 +163,7 @@ Le joueur a besoin de savoir:
 ### Recommandations
 
 - La case du joueur doit rester la reference visuelle absolue.
+- Le chemin previsionnel doit etre visible avant clic et correspondre exactement au trajet reel.
 - Le chemin deja parcouru dans le chunk courant doit devenir `legerement grise`.
 - Les routes doivent etre lisibles comme des routes, pas comme un bruit de texture.
 - Les POI doivent avoir un label flottant discret:
@@ -163,6 +188,12 @@ Le joueur a besoin de savoir:
   - desaturation legere,
   - opacity basse,
   - disparition progressive.
+- Ajouter une `preview de chemin` au survol:
+  - uniquement orthogonale,
+  - jamais diagonale,
+  - couleur douce mais lisible,
+  - case finale clairement marquee,
+  - etat invalide visible si la destination est bloquee.
 - Ajouter des `labels POI` directement sur la map:
   - affichage passif si visible,
   - surbrillance quand le joueur est a 1-2 cases,
@@ -190,6 +221,8 @@ Le joueur doit identifier d un coup d oeil:
 - Le marchand doit etre lisible comme marchand meme sans texte.
 - Le maitre de guilde doit etre lisible comme figure d autorite.
 - Les animaux et PNJ mineurs doivent enrichir la scene sans parasiter la lecture.
+- Les ennemis doivent etre lisibles comme une menace avant l attaque.
+- Les PNJ doivent sembler habiter la scene et non flotter au hasard.
 
 ### Spec UX concrete
 
@@ -197,16 +230,30 @@ Le joueur doit identifier d un coup d oeil:
   - sac / piece pour le marchand,
   - banniere / blason pour la guilde,
   - lit / tasse pour l auberge.
+- Ajouter un bouton `Infos` dans le popup d interaction PNJ:
+  - nom,
+  - role,
+  - metier,
+  - personnalite,
+  - faction,
+  - humeur,
+  - courte fiche lore.
 - Ajouter un `nom flottant` seulement:
   - au hover si souris,
   - ou quand le joueur est proche,
   - ou pendant une interaction.
 - Les PNJ fixes ne doivent pas bouger leur orientation tant qu ils n avancent pas reellement.
+- Les PNJ mobiles doivent avoir des mouvements credibles:
+  - rayon limite,
+  - role lisible,
+  - retour a leur point logique,
+  - pas de demi-tour absurde a chaque seconde.
 - Les morts de PNJ ou monstres doivent avoir une animation simple mais propre:
   - flash court,
   - chute / fade,
   - petite dissipation,
   - eventuellement drop au sol.
+- Les ennemis doivent avoir un telegraph simple avant aggro ou grosse attaque.
 
 ---
 
@@ -244,33 +291,47 @@ L objectif global existe, mais il manque une decomposition claire en etapes visi
 
 ## D. Comprendre le langage d action
 
-Le free text est fort, mais il peut perdre les joueurs.
+Le free text doit rester fort, mais il ne doit plus flotter hors du monde.
 
 ### Le joueur doit savoir
 
+- sur quoi il agit exactement,
 - quel type de phrase marche bien,
 - ce que le jeu a compris,
 - pourquoi une action a echoue ou a ete reinterpretee.
 
 ### Recommandations
 
+- toujours lier l intention a une cible ou a une case quand c est possible,
+- montrer clairement la cible selectionnee,
 - Ne jamais laisser une interpretation importante implicite.
 - Montrer une ligne `Intention comprise`.
 - Donner des exemples d actions utiles.
 
 ### Spec UX concrete
 
-- Sous l input, afficher des `suggestions contextuelles`:
-  - `aller a la boutique`
-  - `parler au marchand`
-  - `prendre une quete`
-  - `aller au donjon`
+- Clic droit sur une cible ou une case:
+  - ouvre un popup d interaction,
+  - affiche le nom/type de la cible,
+  - rappelle la distance,
+  - propose 3 ou 4 exemples contextuels.
+- Le popup doit pouvoir viser:
+  - un PNJ,
+  - un batiment,
+  - un objet du decor,
+  - une case de sol,
+  - un bord de transition.
 - Ajouter une ligne au dessus du log:
-  - `Intention comprise: se rendre a la boutique`
-  - `Intention comprise: acheter Potion de soin`
+  - `Cible: Marchand`
+  - `Intention comprise: negocier le prix d une potion`
 - En cas d ambiguite:
   - expliquer clairement,
-  - proposer 2 ou 3 reformulations.
+  - proposer 2 ou 3 reformulations,
+  - conserver la cible pour ne pas faire perdre le contexte.
+- Quand l action part:
+  - bulle breve au dessus du joueur,
+  - puis bulle reponse au dessus de la cible ou de la zone si pertinent.
+- Le popup d un PNJ doit proposer `Interagir` et `Infos`.
 
 ---
 
@@ -339,6 +400,10 @@ Traitement:
 ### Spec UX concrete
 
 - Ajouter des `Event Cards` pour les evenements majeurs.
+- Ajouter un `World Event Director` visible dans la mise en scene:
+  - tous les 3 a 10 tours joueur, une nouvelle variation du monde peut apparaitre,
+  - jamais de repetition trop rapide,
+  - toujours avec une lecture claire dans la scene et dans le journal.
 - Exemple `Mise a Prix`:
   - grand titre: `TA TETE EST MISE A PRIX`
   - sous-texte: `Le village parle de toi. Des chasseurs te recherchent.`
@@ -368,6 +433,12 @@ Traitement:
   - OR,
   - STRESS,
   - RANG.
+- Integrer les vraies stats de style RPG:
+  - FORCE
+  - VITESSE
+  - VOLONTE
+  - MAGIE
+  - AURA
 
 ### Spec UX concrete
 
@@ -384,6 +455,10 @@ Traitement:
 - RANG:
   - capsule plus noble,
   - effet de promotion lors du passage B/A/S.
+- Stats avancées:
+  - regroupement propre dans une seconde ligne ou un panneau deroulant,
+  - lecture elegante de `force`, `vitesse`, `volonte`, `magie`, `aura`,
+  - secondaires visibles au besoin sans surcharger le haut d ecran.
 
 ## Colonne Narrateur
 
@@ -438,6 +513,7 @@ C est un chantier central.
 ### Demandes concretes a integrer
 
 - la ou le joueur passe, cela devient `legerement grise`,
+- le chemin vise a la souris est visible avant clic,
 - la boutique doit afficher `Boutique` au dessus,
 - la guilde doit afficher `Guilde`,
 - les lieux utiles doivent etre reconnaissables avant interaction.
@@ -476,6 +552,8 @@ Le jeu bouge, mais il manque encore une vraie hierarchie motion.
 - souple,
 - lisible,
 - cadence constante.
+- orthogonal,
+- sans tremblement ni micro-teleport.
 
 #### Interaction
 
@@ -502,6 +580,21 @@ Le jeu bouge, mais il manque encore une vraie hierarchie motion.
 
 ### Spec UX concrete
 
+- Deplacement:
+  - pas d animation diagonale,
+  - anticipation tres courte au depart,
+  - easing leger entre les cases,
+  - settle court a l arrivee,
+  - preview de chemin nette et stable.
+- Aggro ennemi:
+  - petit telegraph visuel,
+  - changement de posture ou halo,
+  - reaction claire si le joueur passe dans la zone de danger.
+- Vie PNJ:
+  - petites variations idle,
+  - regards coherents,
+  - micro-pauses naturelles,
+  - mouvement lie a leur role.
 - Mort PNJ/monstre:
   - flash,
   - petite secousse,

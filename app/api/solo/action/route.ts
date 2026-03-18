@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { applyOutcome, buildActionContext } from "@/lib/solo/logic";
 import { resolveSoloAction } from "@/lib/solo/resolve";
-import type { SoloGameState } from "@/lib/solo/types";
-import { enforceWorldCoherence } from "@/lib/solo/world";
+import { buildRepeatSignature, hydrateSoloState, isSoloState } from "@/lib/solo/runtime";
+import { getSoloSession, putSoloSession } from "@/lib/solo/sessionStore";
+import type { PlayerInteractionRequest, SoloGameState } from "@/lib/solo/types";
 
 type ActionPayload = {
   actionText?: string;
   state?: SoloGameState;
+  interaction?: PlayerInteractionRequest | null;
 };
 
 export async function POST(request: NextRequest) {
@@ -14,15 +16,43 @@ export async function POST(request: NextRequest) {
     const body = (await request.json()) as ActionPayload;
     const actionText = typeof body.actionText === "string" ? body.actionText.trim().slice(0, 400) : "";
     const state = body.state;
+    const interaction =
+      body.interaction && typeof body.interaction === "object"
+        ? {
+            ...body.interaction,
+            source: body.interaction.source ?? "text",
+          }
+        : null;
 
     if (!actionText || !isSoloState(state)) {
       return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
     }
 
-    const safeState = normalizeState(state);
-    const context = buildActionContext(safeState);
-    const outcome = await resolveSoloAction({ actionText, context });
-    const nextState = applyOutcome(safeState, outcome);
+    const hydratedClientState = hydrateSoloState(state);
+    const safeState =
+      getSoloSession(hydratedClientState.serverSessionId) ??
+      hydratedClientState;
+    const safeInteraction: PlayerInteractionRequest = interaction
+      ? {
+          ...interaction,
+          actionText,
+          repeatSignature:
+            interaction.repeatSignature?.trim() ||
+            buildRepeatSignature(actionText, {
+              ...interaction,
+              actionText,
+            }),
+        }
+      : {
+          type: "context",
+          actionText,
+          source: "text",
+          repeatSignature: buildRepeatSignature(actionText, null),
+        };
+
+    const context = buildActionContext(safeState, safeInteraction);
+    const outcome = await resolveSoloAction({ actionText, context, interaction: safeInteraction, state: safeState });
+    const nextState = putSoloSession(applyOutcome(safeState, outcome, safeInteraction));
 
     return NextResponse.json({
       ok: true,
@@ -38,36 +68,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-function normalizeState(state: SoloGameState): SoloGameState {
-  const normalized: SoloGameState = {
-    ...state,
-    player: {
-      ...state.player,
-      rank: state.player.rank || "C",
-      equippedItemId: state.player.equippedItemId ?? null,
-      equippedItemName: state.player.equippedItemName ?? null,
-      equippedItemSprite: state.player.equippedItemSprite ?? null,
-    },
-  };
-  if (!Number.isFinite(normalized.player.x) || !Number.isFinite(normalized.player.y)) {
-    normalized.player.x = 24;
-    normalized.player.y = 25;
-  }
-  normalized.player.x = Math.min(Math.max(Math.round(normalized.player.x), 0), normalized.worldWidth - 1);
-  normalized.player.y = Math.min(Math.max(Math.round(normalized.player.y), 0), normalized.worldHeight - 1);
-  enforceWorldCoherence(normalized);
-  return normalized;
-}
-
-function isSoloState(value: unknown): value is SoloGameState {
-  if (!value || typeof value !== "object") return false;
-  const v = value as Record<string, unknown>;
-  if (!v.player || typeof v.player !== "object") return false;
-  if (!Array.isArray(v.tiles) || !Array.isArray(v.actors) || !Array.isArray(v.log) || !Array.isArray(v.quests)) {
-    return false;
-  }
-  if (typeof v.worldWidth !== "number" || typeof v.worldHeight !== "number") return false;
-  return true;
 }
