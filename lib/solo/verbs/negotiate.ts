@@ -32,24 +32,38 @@ export const negotiateVerb: VerbHandler = {
     const nextDiscount = Math.min(CONFIG.shop.negotiateMaxDiscount, currentDiscount + bonus);
 
     const success = roll >= CONFIG.negotiate.rollThreshold;
-    const ops: WorldOp[] = [
-      {
-        type: "set_shop_discount",
-        targetRef: target.ref,
-        percent: success ? nextDiscount : currentDiscount,
-      },
-    ];
+    const ops: WorldOp[] = [];
+
+    if (tier === "catastrophe") {
+      // Opposite: prices go UP
+      const penalty = Math.max(0, currentDiscount - 5);
+      ops.push({ type: "set_shop_discount", targetRef: target.ref, percent: penalty });
+      return {
+        ops,
+        speechBubbles: [
+          makeSpeechBubble(target.ref, target.name, "Tu m insultes ? Les prix augmentent.", "speech", 2600),
+        ],
+      };
+    }
+
+    ops.push({
+      type: "set_shop_discount",
+      targetRef: target.ref,
+      percent: success ? nextDiscount : currentDiscount,
+    });
+
+    const speech = tier === "miss"
+      ? "Hmm, non. Mais sans rancune."
+      : tier === "failure"
+        ? "Non. Et n insiste pas."
+        : tier === "legendary"
+          ? `Incroyable... -${nextDiscount}% et je t offre un cadeau.`
+          : `Bon. Tu auras -${nextDiscount}% pour cette partie.`;
 
     return {
       ops,
       speechBubbles: [
-        makeSpeechBubble(
-          target.ref,
-          target.name,
-          success ? `Bon. Tu auras -${nextDiscount}% pour cette partie.` : "Non. Je garde mes prix.",
-          "speech",
-          2600
-        ),
+        makeSpeechBubble(target.ref, target.name, speech, "speech", 2600),
       ],
     };
   },

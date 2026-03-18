@@ -31,7 +31,6 @@ export const stealVerb: VerbHandler = {
     if (roll === null) return { ops: [] };
     const target = resolveTarget(state, draft);
     if (!target) return { ops: [] };
-    const tier = getRollTier(roll);
 
     const holderState = getEntityState(state, target.ref);
     const item = draft.desiredItemName ? findItemByName(holderState.inventory, draft.desiredItemName) : holderState.inventory[0] ?? null;
@@ -41,8 +40,10 @@ export const stealVerb: VerbHandler = {
       ? CONFIG.steal.legendaryDC
       : target.kind === "actor" ? CONFIG.steal.actorDC : CONFIG.steal.structureDC;
 
+    const tier = getRollTier(roll);
     const success = roll >= threshold;
     const ops: WorldOp[] = [];
+    const bubbles = [];
 
     if (success) {
       ops.push({
@@ -52,7 +53,24 @@ export const stealVerb: VerbHandler = {
         itemName: item.name,
         qty: 1,
       });
+      bubbles.push(makeSpeechBubble(
+        target.ref,
+        target.kind === "actor" ? target.name : null,
+        tier === "legendary" ? "Qu est-ce que... non, rien." : "Hein... attends. Il me manque quelque chose.",
+        target.kind === "actor" ? "speech" : "system",
+        2600
+      ));
+    } else if (tier === "miss") {
+      // Clean fail: no crime, no item, just no opportunity
+      bubbles.push(makeSpeechBubble(
+        target.ref,
+        target.kind === "actor" ? target.name : null,
+        "...",
+        "thought",
+        1200
+      ));
     } else {
+      // Failure/catastrophe: caught, crime recorded
       ops.push({
         type: "record_incident",
         incident: {
@@ -61,23 +79,24 @@ export const stealVerb: VerbHandler = {
           zone: "village_camp",
           actorId: target.kind === "actor" ? (target.actorId ?? null) : null,
           summary: `Tentative de vol contre ${target.name}.`,
-          severity: target.kind === "actor" ? CONFIG.steal.failedStealSeverityActor : CONFIG.steal.failedStealSeverityStructure,
+          severity: tier === "catastrophe"
+            ? (target.kind === "actor" ? CONFIG.steal.failedStealSeverityActor * 2 : CONFIG.steal.failedStealSeverityStructure * 2)
+            : (target.kind === "actor" ? CONFIG.steal.failedStealSeverityActor : CONFIG.steal.failedStealSeverityStructure),
           permanent: true,
         },
       });
+      bubbles.push(makeSpeechBubble(
+        target.ref,
+        target.kind === "actor" ? target.name : null,
+        tier === "catastrophe" ? "VOLEUR ! GARDES !" : "Je t ai vu.",
+        target.kind === "actor" ? "speech" : "system",
+        2600
+      ));
     }
 
     return {
       ops,
-      speechBubbles: [
-        makeSpeechBubble(
-          target.ref,
-          target.kind === "actor" ? target.name : null,
-          success ? "Hein... attends. Il me manque quelque chose." : "Je t ai vu.",
-          target.kind === "actor" ? "speech" : "system",
-          2600
-        ),
-      ],
+      speechBubbles: bubbles,
     };
   },
 

@@ -202,13 +202,19 @@ export const CONFIG = {
 } as const;
 
 // ─── D20 Roll Tiers ───
-export type RollTier = "catastrophe" | "failure" | "partial" | "success" | "critical" | "legendary";
+// 1     = catastrophe  → l'inverse se produit, conséquences négatives
+// 2-5   = failure      → ça rate, conséquences mineures
+// 6-8   = miss         → ça ne marche pas, mais rien de négatif
+// 9-13  = success      → fonctionne normalement
+// 14-19 = critical     → mieux que prévu
+// 20    = legendary    → résultat incroyable, dépasse les attentes
+export type RollTier = "catastrophe" | "failure" | "miss" | "success" | "critical" | "legendary";
 
 export function getRollTier(roll: number): RollTier {
   if (roll <= 1) return "catastrophe";
   if (roll <= 5) return "failure";
-  if (roll <= 10) return "partial";
-  if (roll <= 14) return "success";
+  if (roll <= 8) return "miss";
+  if (roll <= 13) return "success";
   if (roll <= 19) return "critical";
   return "legendary";
 }

@@ -31,6 +31,11 @@ import { takeVerb } from "./take";
 import { talkVerb } from "./talk";
 import { recruitVerb } from "./recruit";
 import { useVerb } from "./use";
+import { craftVerb } from "./craft";
+import { giveVerb } from "./give";
+import { hideVerb } from "./hide";
+import { castVerb } from "./cast";
+import { performVerb } from "./perform";
 
 // ─── Register all verbs ───
 let registered = false;
@@ -51,6 +56,11 @@ export function ensureVerbsRegistered(): void {
   registerVerb(talkVerb);
   registerVerb(recruitVerb);
   registerVerb(useVerb);
+  registerVerb(craftVerb);
+  registerVerb(giveVerb);
+  registerVerb(hideVerb);
+  registerVerb(castVerb);
+  registerVerb(performVerb);
 }
 
 // ─── Main Resolution Pipeline ───

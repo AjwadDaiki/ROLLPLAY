@@ -415,6 +415,7 @@
   text-align: center;
 }
 
+/* ─── Combat Overlay ─── */
 .combatWheelOverlay {
   position: absolute;
   inset: 0;
@@ -422,51 +423,80 @@
   place-items: center;
   pointer-events: none;
   z-index: 8;
-  background: rgba(8, 11, 20, 0.38);
+  background: rgba(8, 11, 20, 0.45);
+  animation: combatFadeIn 0.3s ease-out;
+}
+
+@keyframes combatFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .combatWheelCard {
-  width: min(560px, calc(100% - 28px));
-  border-radius: 16px;
-  border: 1px solid rgba(241, 199, 110, 0.72);
-  background: rgba(10, 16, 29, 0.94);
-  box-shadow: 0 24px 54px rgba(0, 0, 0, 0.45);
-  padding: 14px;
+  width: min(520px, calc(100% - 20px));
+  border-radius: 14px;
+  border: 2px solid rgba(241, 199, 110, 0.6);
+  background: rgba(10, 16, 29, 0.96);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  padding: 12px;
   display: grid;
-  gap: 10px;
-}
-
-.combatWheelHead {
-  color: #ffe4ad;
-  font-weight: 800;
-  font-size: 18px;
-}
-
-.combatCommandStrip {
-  display: flex;
-  flex-wrap: wrap;
   gap: 8px;
+  animation: combatCardSlide 0.35s ease-out;
 }
 
-.combatCommandChip {
-  min-height: 32px;
-  border-radius: 999px;
-  border: 1px solid rgba(147, 168, 214, 0.42);
-  background: rgba(16, 25, 43, 0.86);
-  color: #cbd8f5;
-  padding: 0 12px;
-  display: inline-flex;
+.combatWheelCard[data-tier="catastrophe"] { border-color: rgba(255, 60, 60, 0.7); }
+.combatWheelCard[data-tier="legendary"] { border-color: rgba(255, 70, 255, 0.7); }
+.combatWheelCard[data-tier="critical"] { border-color: rgba(240, 192, 64, 0.7); }
+
+@keyframes combatCardSlide {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* ─── Header: diff badge + tier + dice ─── */
+.combatWheelHead {
+  display: flex;
   align-items: center;
-  font-size: 12px;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.combatDiffBadge {
+  font-size: 10px;
   font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(80, 90, 120, 0.5);
+  color: #b0bce0;
+}
+.combatDiffBadge[data-diff="trivial"] { background: rgba(80,180,120,0.25); color: #80d0a0; }
+.combatDiffBadge[data-diff="easy"] { background: rgba(100,180,80,0.25); color: #a0d080; }
+.combatDiffBadge[data-diff="normal"] { background: rgba(120,140,180,0.25); color: #b0c0e0; }
+.combatDiffBadge[data-diff="hard"] { background: rgba(200,140,40,0.25); color: #e0c060; }
+.combatDiffBadge[data-diff="extreme"] { background: rgba(200,50,50,0.25); color: #e06060; }
+
+.combatTierBadge {
+  font-size: 15px;
+  font-weight: 900;
+  text-shadow: 0 0 12px currentColor;
 }
 
-.combatCommandChip[data-active="1"] {
-  border-color: rgba(242, 198, 106, 0.76);
-  color: #ffe2a9;
-  background: rgba(47, 34, 13, 0.9);
+.combatDiceRoll {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 700;
+  color: #c0c8e0;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(150, 160, 200, 0.3);
+  background: rgba(20, 28, 48, 0.7);
 }
+.combatDiceRoll[data-tier="catastrophe"] { color: #ff5050; border-color: rgba(255,60,60,0.4); }
+.combatDiceRoll[data-tier="legendary"] { color: #ff60ff; border-color: rgba(255,70,255,0.4); }
 
+/* ─── Pokemon-style stat panels ─── */
 .combatWheelStats {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -475,54 +505,108 @@
 
 .combatStatPanel {
   border-radius: 10px;
-  border: 1px solid rgba(152, 172, 220, 0.34);
-  background: rgba(8, 14, 25, 0.74);
-  padding: 8px;
+  border: 1px solid rgba(152, 172, 220, 0.28);
+  background: rgba(8, 14, 25, 0.8);
+  padding: 8px 10px;
   display: grid;
-  gap: 4px;
+  gap: 3px;
 }
 
-.combatStatPanel strong {
+.combatStatPanel[data-side="player"] {
+  border-left: 3px solid #54be8d;
+}
+.combatStatPanel[data-side="enemy"] {
+  border-left: 3px solid #cf6c6c;
+}
+
+.combatNameRow {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.combatNameRow strong {
   color: #f2f6ff;
-  font-size: 14px;
+  font-size: 13px;
 }
 
-.combatStatPanel small {
-  color: #b9c8eb;
-  font-size: 11px;
+.combatLevel {
+  font-size: 10px;
+  font-weight: 700;
+  color: #90a0c8;
+  background: rgba(60, 70, 100, 0.4);
+  padding: 1px 5px;
+  border-radius: 3px;
 }
 
 .combatHpBar {
-  height: 10px;
+  height: 8px;
   border-radius: 999px;
   overflow: hidden;
-  border: 1px solid rgba(141, 163, 209, 0.34);
+  border: 1px solid rgba(141, 163, 209, 0.25);
   background: rgba(8, 13, 24, 0.92);
 }
 
 .combatHpFill {
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #f26767 0%, #f6cf7f 100%);
-  box-shadow: 0 0 18px rgba(242, 111, 103, 0.34);
+  transition: width 0.6s ease-out, background 0.3s;
+  box-shadow: 0 0 8px rgba(80, 190, 140, 0.3);
 }
 
+.combatStatRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: #90a0c8;
+  font-weight: 600;
+}
+
+.combatDmgTag {
+  font-size: 12px;
+  font-weight: 900;
+  color: #ff5050;
+  text-shadow: 0 0 6px rgba(255, 60, 60, 0.5);
+  animation: dmgPulse 0.4s ease-out;
+}
+
+.combatKoTag {
+  font-size: 14px;
+  font-weight: 900;
+  color: #ff3b3b;
+  text-align: center;
+  text-shadow: 0 0 10px rgba(255, 60, 60, 0.6);
+  animation: koPulse 0.6s ease-out;
+}
+
+@keyframes dmgPulse {
+  0% { transform: scale(1.4); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes koPulse {
+  0% { transform: scale(2); opacity: 0; }
+  50% { transform: scale(0.9); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* ─── Spinning wheel ─── */
 .combatWheelWrap {
   position: relative;
-  width: 190px;
-  height: 190px;
-  margin: 4px auto;
+  width: 160px;
+  height: 160px;
+  margin: 2px auto;
   border-radius: 50%;
   display: grid;
   place-items: center;
 }
 
 .combatWheel {
-  width: 180px;
-  height: 180px;
+  width: 150px;
+  height: 150px;
   border-radius: 50%;
-  border: 3px solid rgba(252, 226, 172, 0.78);
-  box-shadow: inset 0 0 0 3px rgba(8, 12, 22, 0.56), 0 10px 24px rgba(0, 0, 0, 0.42);
+  border: 3px solid rgba(252, 226, 172, 0.7);
+  box-shadow: inset 0 0 0 3px rgba(8, 12, 22, 0.5), 0 8px 20px rgba(0, 0, 0, 0.4);
   animation: wheelSpin 2.15s cubic-bezier(0.2, 0.76, 0.24, 1) forwards;
 }
 
@@ -533,18 +617,84 @@
   transform: translateX(-50%);
   width: 0;
   height: 0;
-  border-left: 10px solid transparent;
-  border-right: 10px solid transparent;
-  border-top: 14px solid #ffe4ac;
-  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5));
+  border-left: 9px solid transparent;
+  border-right: 9px solid transparent;
+  border-top: 13px solid #ffe4ac;
+  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.5));
   z-index: 2;
 }
 
+.combatWheelPctLabel {
+  position: absolute;
+  bottom: -2px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  font-weight: 800;
+  color: rgba(255, 228, 172, 0.8);
+}
+
+/* ─── Command strip ─── */
+.combatCommandStrip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+}
+
+.combatCommandChip {
+  min-height: 28px;
+  border-radius: 6px;
+  border: 1px solid rgba(147, 168, 214, 0.3);
+  background: rgba(16, 25, 43, 0.8);
+  color: #8090b8;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 800;
+  transition: all 0.2s;
+}
+
+.combatCommandChip[data-active="1"] {
+  border-color: rgba(242, 198, 106, 0.7);
+  color: #ffe2a9;
+  background: rgba(47, 34, 13, 0.9);
+  box-shadow: 0 0 8px rgba(242, 198, 106, 0.2);
+}
+
+/* ─── Combat narration ─── */
+.combatNarration {
+  text-align: center;
+  font-size: 12px;
+  font-style: italic;
+  color: #b0bce0;
+  padding: 4px 8px;
+  min-height: 18px;
+  line-height: 1.3;
+}
+
+/* ─── Result line ─── */
 .combatWheelResult {
   text-align: center;
+  font-weight: 900;
+  font-size: 14px;
   color: #ffe6b4;
-  font-weight: 800;
-  font-size: 13px;
+  padding: 4px 0;
+}
+
+.combatWheelResult[data-winner="player"] {
+  color: #54be8d;
+  text-shadow: 0 0 10px rgba(80, 190, 140, 0.4);
+}
+
+.combatWheelResult[data-winner="enemy"] {
+  color: #cf6c6c;
+  text-shadow: 0 0 10px rgba(200, 80, 80, 0.4);
+}
+
+.combatWheelResult[data-winner="draw"] {
+  color: #c0c8e0;
 }
 
 .narratorCard {

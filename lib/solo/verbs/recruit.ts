@@ -33,11 +33,27 @@ export const recruitVerb: VerbHandler = {
       : actor.kind === "animal" ? CONFIG.recruit.animalThreshold
       : actor.id === "npc_guard_road" ? CONFIG.recruit.guardThreshold
       : CONFIG.recruit.npcThreshold;
+    const tier = getRollTier(roll);
     const success = roll >= threshold;
 
-    const speech = success
-      ? (actor.kind === "monster" ? "Je combats a tes cotes." : actor.kind === "animal" ? "..." : "Je te suis.")
-      : (actor.kind === "monster" ? "Jamais." : "Non merci.");
+    if (tier === "catastrophe") {
+      // Opposite: target becomes aggressive
+      return {
+        ops: [],
+        speechBubbles: [
+          makeSpeechBubble(`actor:${actor.id}`, actor.name, "Tu oses ? Je vais te le faire regretter.", "speech", 2500),
+        ],
+        extraData: { recruitActorId: null, recruitMode: null },
+      };
+    }
+
+    const speech = tier === "miss"
+      ? (actor.kind === "animal" ? "..." : "Peut-etre une autre fois.")
+      : success
+        ? (tier === "legendary"
+          ? (actor.kind === "monster" ? "Mon epee est tienne, pour toujours." : "Je te suivrai jusqu au bout du monde.")
+          : (actor.kind === "monster" ? "Je combats a tes cotes." : actor.kind === "animal" ? "..." : "Je te suis."))
+        : (actor.kind === "monster" ? "Jamais." : "Non merci.");
 
     return {
       ops: [],

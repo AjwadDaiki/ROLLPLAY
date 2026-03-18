@@ -281,6 +281,11 @@ export type ActionVerb =
   | "dig"
   | "use"
   | "rest"
+  | "craft"
+  | "give"
+  | "hide"
+  | "cast"
+  | "perform"
   | "unknown";
 
 export type ActionDraft = {

@@ -93,10 +93,14 @@ type BattleFx = {
   durationMs: number;
   commandLabel: string;
   roll: number | null;
+  tier: "catastrophe" | "failure" | "miss" | "success" | "critical" | "legendary" | null;
   playerWeight: number;
   enemyWeight: number;
-  winner: "player" | "enemy";
+  winner: "player" | "enemy" | "draw";
   spinDeg: number;
+  difficulty: "trivial" | "easy" | "normal" | "hard" | "extreme";
+  difficultyLabel: string;
+  combatNarration: string;
   playerStats: {
     power: number;
     combat: number;
@@ -104,6 +108,7 @@ type BattleFx = {
     hp: number;
     hpAfter: number;
     maxHp: number;
+    level: number;
   };
   enemyStats: {
     power: number;
@@ -112,9 +117,11 @@ type BattleFx = {
     hp: number;
     hpAfter: number;
     maxHp: number;
+    level: number;
   };
   playerDamageTaken: number;
   enemyDamageTaken: number;
+  enemyKilled: boolean;
 };
 
 type Facing = "up" | "down" | "left" | "right";
@@ -1926,10 +1933,115 @@ export default function GameClient() {
                 : `${hovered.entity.name} - clic gauche pour te deplacer, clic droit pour agir.`
               : `Controles: ${controlLabel}. Clic gauche = deplacement, clic droit = interaction.`}
           </p>
-          {battleFx ? (
-            <div className={styles.combatWheelOverlay}>
-              <div className={styles.combatWheelCard}>
-                <div className={styles.combatWheelHead}>Scene de combat</div>
+          {battleFx ? (() => {
+            const pHpPct = clamp((battleFx.playerStats.hpAfter / Math.max(1, battleFx.playerStats.maxHp)) * 100, 0, 100);
+            const eHpPct = clamp((battleFx.enemyStats.hpAfter / Math.max(1, battleFx.enemyStats.maxHp)) * 100, 0, 100);
+            const pSliceDeg = (battleFx.playerWeight / (battleFx.playerWeight + battleFx.enemyWeight)) * 360;
+            const tierLabel: Record<string, string> = {
+              catastrophe: "CATASTROPHE", failure: "Echec", miss: "Rate",
+              success: "Touche!", critical: "Critique!", legendary: "LEGENDAIRE!",
+            };
+            const tierColor: Record<string, string> = {
+              catastrophe: "#ff3b3b", failure: "#e07040", miss: "#a0a0a0",
+              success: "#54be8d", critical: "#f0c040", legendary: "#ff44ff",
+            };
+            const hpColor = (pct: number) =>
+              pct > 50 ? "#54be8d" : pct > 25 ? "#e8c040" : "#e05040";
+            return (
+            <div className={styles.combatWheelOverlay} data-tier={battleFx.tier ?? "success"}>
+              <div className={styles.combatWheelCard} data-tier={battleFx.tier ?? "success"}>
+                {/* ─── Header: difficulty + tier ─── */}
+                <div className={styles.combatWheelHead}>
+                  <span className={styles.combatDiffBadge} data-diff={battleFx.difficulty}>
+                    {battleFx.difficultyLabel}
+                  </span>
+                  {battleFx.tier && (
+                    <span
+                      className={styles.combatTierBadge}
+                      style={{ color: tierColor[battleFx.tier] ?? "#fff" }}
+                    >
+                      {tierLabel[battleFx.tier] ?? battleFx.tier}
+                    </span>
+                  )}
+                  {typeof battleFx.roll === "number" && (
+                    <span className={styles.combatDiceRoll} data-tier={battleFx.tier}>
+                      D20: {battleFx.roll}
+                    </span>
+                  )}
+                </div>
+
+                {/* ─── Pokemon-style stat panels ─── */}
+                <div className={styles.combatWheelStats}>
+                  <div className={styles.combatStatPanel} data-side="player">
+                    <div className={styles.combatNameRow}>
+                      <strong>{state.player.name}</strong>
+                      <span className={styles.combatLevel}>Nv.{battleFx.playerStats.level}</span>
+                    </div>
+                    <div className={styles.combatHpBar}>
+                      <div
+                        className={styles.combatHpFill}
+                        style={{ width: `${pHpPct}%`, background: hpColor(pHpPct) }}
+                      />
+                    </div>
+                    <div className={styles.combatStatRow}>
+                      <span>PV {battleFx.playerStats.hpAfter}/{battleFx.playerStats.maxHp}</span>
+                      <span>STR {battleFx.playerStats.stress}</span>
+                    </div>
+                    <div className={styles.combatStatRow}>
+                      <span>POW {battleFx.playerStats.power}</span>
+                      <span>CMB {battleFx.playerStats.combat}</span>
+                    </div>
+                    {battleFx.playerDamageTaken > 0 && (
+                      <div className={styles.combatDmgTag} data-side="player">-{battleFx.playerDamageTaken} PV</div>
+                    )}
+                  </div>
+
+                  <div className={styles.combatStatPanel} data-side="enemy">
+                    <div className={styles.combatNameRow}>
+                      <strong>{battleFx.enemyName}</strong>
+                      <span className={styles.combatLevel}>Nv.{battleFx.enemyStats.level}</span>
+                    </div>
+                    <div className={styles.combatHpBar}>
+                      <div
+                        className={styles.combatHpFill}
+                        style={{ width: `${eHpPct}%`, background: hpColor(eHpPct) }}
+                      />
+                    </div>
+                    <div className={styles.combatStatRow}>
+                      <span>PV {battleFx.enemyStats.hpAfter}/{battleFx.enemyStats.maxHp}</span>
+                      <span>STR {battleFx.enemyStats.stress}</span>
+                    </div>
+                    <div className={styles.combatStatRow}>
+                      <span>POW {battleFx.enemyStats.power}</span>
+                      <span>CMB {battleFx.enemyStats.combat}</span>
+                    </div>
+                    {battleFx.enemyDamageTaken > 0 && (
+                      <div className={styles.combatDmgTag} data-side="enemy">-{battleFx.enemyDamageTaken} PV</div>
+                    )}
+                    {battleFx.enemyKilled && (
+                      <div className={styles.combatKoTag}>K.O.</div>
+                    )}
+                  </div>
+                </div>
+
+                {/* ─── Spinning wheel ─── */}
+                <div className={styles.combatWheelWrap}>
+                  <span className={styles.combatPointer} />
+                  <div
+                    className={styles.combatWheel}
+                    style={
+                      {
+                        background: `conic-gradient(#54be8d 0deg ${pSliceDeg}deg, #cf6c6c ${pSliceDeg}deg 360deg)`,
+                        "--spin-deg": `${battleFx.spinDeg}deg`,
+                      } as CSSProperties
+                    }
+                  />
+                  <span className={styles.combatWheelPctLabel}>
+                    {Math.round((battleFx.playerWeight / (battleFx.playerWeight + battleFx.enemyWeight)) * 100)}%
+                  </span>
+                </div>
+
+                {/* ─── Command strip ─── */}
                 <div className={styles.combatCommandStrip}>
                   {["Attaquer", "Pouvoir", "Parler", "Fuir"].map((label) => (
                     <span
@@ -1941,51 +2053,22 @@ export default function GameClient() {
                     </span>
                   ))}
                 </div>
-                <div className={styles.combatWheelStats}>
-                  <div className={styles.combatStatPanel} data-side="player">
-                    <strong>{state.player.name}</strong>
-                    <small>POW {battleFx.playerStats.power} | CMB {battleFx.playerStats.combat}</small>
-                    <div className={styles.combatHpBar}>
-                      <div
-                        className={styles.combatHpFill}
-                        style={{ width: `${clamp((battleFx.playerStats.hpAfter / Math.max(1, battleFx.playerStats.maxHp)) * 100, 0, 100)}%` }}
-                      />
-                    </div>
-                    <small>PV {battleFx.playerStats.hpAfter}/{battleFx.playerStats.maxHp} | Stress {battleFx.playerStats.stress}</small>
-                    <small>{battleFx.playerDamageTaken > 0 ? `-${battleFx.playerDamageTaken} PV` : "Aucun degat subi"}</small>
-                  </div>
-                  <div className={styles.combatStatPanel} data-side="enemy">
-                    <strong>{battleFx.enemyName}</strong>
-                    <small>POW {battleFx.enemyStats.power} | CMB {battleFx.enemyStats.combat}</small>
-                    <div className={styles.combatHpBar}>
-                      <div
-                        className={styles.combatHpFill}
-                        style={{ width: `${clamp((battleFx.enemyStats.hpAfter / Math.max(1, battleFx.enemyStats.maxHp)) * 100, 0, 100)}%` }}
-                      />
-                    </div>
-                    <small>PV {battleFx.enemyStats.hpAfter}/{battleFx.enemyStats.maxHp} | Stress {battleFx.enemyStats.stress}</small>
-                    <small>{battleFx.enemyDamageTaken > 0 ? `-${battleFx.enemyDamageTaken} PV` : "Aucun degat inflige"}</small>
-                  </div>
+
+                {/* ─── Narration ─── */}
+                <div className={styles.combatNarration}>
+                  {battleFx.combatNarration}
                 </div>
-                <div className={styles.combatWheelWrap}>
-                  <span className={styles.combatPointer} />
-                  <div
-                    className={styles.combatWheel}
-                    style={
-                      {
-                        background: `conic-gradient(#54be8d 0deg ${(battleFx.playerWeight / (battleFx.playerWeight + battleFx.enemyWeight)) * 360}deg, #cf6c6c ${(battleFx.playerWeight / (battleFx.playerWeight + battleFx.enemyWeight)) * 360}deg 360deg)`,
-                        "--spin-deg": `${battleFx.spinDeg}deg`,
-                      } as CSSProperties
-                    }
-                  />
-                </div>
-                <div className={styles.combatWheelResult}>
-                  {battleFx.winner === "player" ? "Avantage joueur" : "Avantage adversaire"}
-                  {typeof battleFx.roll === "number" ? ` - D20 ${battleFx.roll}` : ""}
+
+                {/* ─── Result line ─── */}
+                <div className={styles.combatWheelResult} data-winner={battleFx.winner}>
+                  {battleFx.winner === "player"
+                    ? battleFx.enemyKilled ? "Victoire!" : "Avantage joueur"
+                    : battleFx.winner === "draw" ? "Egalite" : "Avantage adversaire"}
                 </div>
               </div>
             </div>
-          ) : null}
+            );
+          })() : null}
         </section>
 
         <aside className={styles.narratorCard}>
@@ -2451,6 +2534,40 @@ function actorNameAliases(actor: WorldActor): string[] {
   return Array.from(aliases);
 }
 
+function getRollTierClient(roll: number): BattleFx["tier"] {
+  if (roll <= 1) return "catastrophe";
+  if (roll <= 5) return "failure";
+  if (roll <= 8) return "miss";
+  if (roll <= 13) return "success";
+  if (roll <= 19) return "critical";
+  return "legendary";
+}
+
+function computeDifficulty(player: SoloGameState["player"], enemy: WorldActor): { level: BattleFx["difficulty"]; label: string } {
+  const playerScore = player.strength + (player.defense ?? 4) + player.hp;
+  const enemyScore = (enemy.strength ?? enemy.maxHp / 2 + 4) + (enemy.defense ?? enemy.maxHp / 3) + enemy.hp;
+  const ratio = playerScore / Math.max(1, enemyScore);
+
+  if (ratio > 2.5) return { level: "trivial", label: "Proie facile" };
+  if (ratio > 1.5) return { level: "easy", label: "Avantage net" };
+  if (ratio > 0.7) return { level: "normal", label: "Combat equilibre" };
+  if (ratio > 0.4) return { level: "hard", label: "Adversaire redoutable" };
+  return { level: "extreme", label: "Danger mortel" };
+}
+
+function buildCombatNarration(tier: BattleFx["tier"], winner: string, enemyName: string, enemyKilled: boolean, playerDmg: number): string {
+  if (tier === "catastrophe") return `Echec catastrophique ! Tu te blesses en attaquant ${enemyName}.`;
+  if (tier === "failure") return `Ton coup glisse sur ${enemyName}. La riposte est douloureuse.`;
+  if (tier === "miss") return `Tu frappes dans le vide. ${enemyName} n a meme pas bronche.`;
+  if (enemyKilled && tier === "legendary") return `Coup legendaire ! ${enemyName} s effondre dans un eclat de lumiere !`;
+  if (enemyKilled) return `${enemyName} est vaincu !`;
+  if (tier === "legendary") return `Un coup devastateur fait trembler ${enemyName} !`;
+  if (tier === "critical") return `Coup critique ! ${enemyName} encaisse lourdement.`;
+  if (winner === "player") return `Ton attaque touche ${enemyName}.`;
+  if (playerDmg > 0) return `Echange de coups avec ${enemyName}. Tu prends ${playerDmg} degats.`;
+  return `Le combat avec ${enemyName} continue.`;
+}
+
 function buildBattleWheelFx(
   before: SoloGameState,
   after: SoloGameState,
@@ -2461,6 +2578,7 @@ function buildBattleWheelFx(
   roll: number | null,
   commandLabel: string
 ): Omit<BattleFx, "enemyName" | "enemySprite" | "startedAt" | "durationMs"> {
+  const tier = roll !== null ? getRollTierClient(roll) : null;
   const playerCombat = computePlayerCombat(before);
   const playerPower = clamp(
     Math.round(attackPower + before.player.strength * 0.8 + (before.player.powerAccepted ? before.player.powerRoll * 0.25 : 0)),
@@ -2471,26 +2589,56 @@ function buildBattleWheelFx(
   const enemyCombat = actorCombat(enemy);
   const enemyStress = actorStress(enemy);
 
-  const playerWeight = clamp(
-    Math.round(playerPower * 2 + playerCombat * 4 + Math.max(0, 34 - before.player.stress)),
-    14,
-    260
+  // --- Weight formula: stats-based (60%) + roll-based (40%) ---
+  // Base weight from stats (like Pokemon: higher stats = bigger wheel slice)
+  const playerStatWeight = clamp(
+    Math.round(
+      before.player.strength * 3
+      + playerCombat * 4
+      + (before.player.defense ?? 4) * 2
+      + Math.max(0, 30 - before.player.stress)
+    ),
+    20,
+    200
   );
-  const enemyWeight = clamp(
-    Math.round(enemyPower * 2 + enemyCombat * 4 + Math.max(0, 34 - enemyStress)),
-    14,
-    260
+  const enemyStatWeight = clamp(
+    Math.round(
+      (enemy.strength ?? enemy.maxHp / 2 + 4) * 3
+      + enemyCombat * 4
+      + (enemy.defense ?? enemy.maxHp / 3) * 2
+      + Math.max(0, 30 - enemyStress)
+    ),
+    20,
+    200
   );
 
+  // Roll bonus: amplifies the stat advantage
+  const rollBonus = roll !== null ? clamp(Math.round((roll - 10) * 3), -30, 30) : 0;
+  const playerWeight = clamp(playerStatWeight + rollBonus, 15, 260);
+  const enemyWeight = clamp(enemyStatWeight - rollBonus, 15, 260);
+
+  // --- Difficulty ---
+  const diff = computeDifficulty(before.player, enemy);
+
+  // --- Damage ---
   const enemyHpBefore = enemyBefore?.hp ?? enemy.hp;
   const enemyHpAfter = enemyAfter ? enemyAfter.hp : 0;
   const enemyDamageTaken = Math.max(0, enemyHpBefore - enemyHpAfter);
   const playerDamageTaken = Math.max(0, before.player.hp - after.player.hp);
+  const enemyKilled = !!(enemyAfter && !enemyAfter.alive);
 
-  let winner: "player" | "enemy" = enemyDamageTaken >= playerDamageTaken ? "player" : "enemy";
-  if (enemyAfter && !enemyAfter.alive) winner = "player";
-  if (after.player.hp <= 0 && before.player.hp > 0) winner = "enemy";
+  // --- Winner ---
+  let winner: "player" | "enemy" | "draw" = "draw";
+  if (enemyKilled) winner = "player";
+  else if (after.player.hp <= 0 && before.player.hp > 0) winner = "enemy";
+  else if (enemyDamageTaken > playerDamageTaken) winner = "player";
+  else if (playerDamageTaken > enemyDamageTaken) winner = "enemy";
 
+  // --- Player/Enemy levels ---
+  const playerLevel = clamp(Math.floor((before.player.strength + playerCombat) / 3), 1, 50);
+  const enemyLevel = clamp(Math.floor(((enemy.strength ?? 5) + enemyCombat) / 3), 1, 50);
+
+  // --- Wheel spin ---
   const total = playerWeight + enemyWeight;
   const playerSpan = (playerWeight / total) * 360;
   const safeMargin = 8;
@@ -2502,16 +2650,25 @@ function buildBattleWheelFx(
     return min + safeMargin + Math.random() * (span - safeMargin * 2);
   };
 
-  const targetAngle = winner === "player" ? pickAngle(0, playerSpan) : pickAngle(playerSpan, 360);
+  const targetAngle = winner === "player" || winner === "draw"
+    ? pickAngle(0, playerSpan)
+    : pickAngle(playerSpan, 360);
   const spinDeg = 1440 + (270 - targetAngle);
+
+  // --- Combat narration ---
+  const combatNarration = buildCombatNarration(tier, winner, enemy.name, enemyKilled, playerDamageTaken);
 
   return {
     commandLabel,
     roll,
+    tier,
     playerWeight,
     enemyWeight,
     winner,
     spinDeg,
+    difficulty: diff.level,
+    difficultyLabel: diff.label,
+    combatNarration,
     playerStats: {
       power: playerPower,
       combat: playerCombat,
@@ -2519,6 +2676,7 @@ function buildBattleWheelFx(
       hp: before.player.hp,
       hpAfter: after.player.hp,
       maxHp: before.player.maxHp,
+      level: playerLevel,
     },
     enemyStats: {
       power: enemyPower,
@@ -2527,9 +2685,11 @@ function buildBattleWheelFx(
       hp: enemyHpBefore,
       hpAfter: enemyAfter ? enemyAfter.hp : Math.max(0, enemyHpBefore - enemyDamageTaken),
       maxHp: enemy.maxHp,
+      level: enemyLevel,
     },
     playerDamageTaken,
     enemyDamageTaken,
+    enemyKilled,
   };
 }
 
@@ -3644,9 +3804,9 @@ function drawBattleScene(
   const player = cache.get(state.player.characterWalk);
   const enemy = cache.get(battle.enemySprite);
 
+  // ─── Background: checkerboard field ───
   ctx.fillStyle = "#1a2231";
   ctx.fillRect(0, 0, MAP_PX, MAP_PX);
-
   if (field) {
     for (let y = 0; y < CHUNK_SIZE; y += 1) {
       for (let x = 0; x < CHUNK_SIZE; x += 1) {
@@ -3656,33 +3816,149 @@ function drawBattleScene(
     }
   }
 
+  // ─── Tier-based tint overlay ───
+  const tierTint: Record<string, string> = {
+    catastrophe: "rgba(180,30,30,0.12)", legendary: "rgba(200,80,255,0.10)",
+    critical: "rgba(220,180,40,0.08)", miss: "rgba(100,100,120,0.10)",
+  };
+  const tint = battle.tier ? tierTint[battle.tier] : null;
+  if (tint) {
+    ctx.fillStyle = tint;
+    ctx.fillRect(0, 0, MAP_PX, MAP_PX);
+  }
+
   const progress = clamp((now - battle.startedAt) / battle.durationMs, 0, 1);
-  const swing = Math.sin(progress * Math.PI) * 20;
-  const shake = battle.roll === 1 ? Math.sin(now * 0.05) * 2.5 : 0;
 
-  const playerX = 110 + swing;
-  const enemyX = MAP_PX - 180 - swing;
-  const y = MAP_PX * 0.5 - 24;
+  // ─── Pokemon-style positioning: player bottom-left, enemy top-right ───
+  const spriteSize = 72;
+  const playerBaseX = MAP_PX * 0.15;
+  const playerBaseY = MAP_PX * 0.58;
+  const enemyBaseX = MAP_PX * 0.62;
+  const enemyBaseY = MAP_PX * 0.22;
 
-  drawShadow(ctx, playerX + 34, y + 64, 16, 0.3);
-  drawShadow(ctx, enemyX + 34, y + 64, 16, 0.3);
+  // Entrance slide: sprites slide in from offscreen
+  const slideIn = Math.min(1, progress * 4);
+  const easeSlide = 1 - Math.pow(1 - slideIn, 3);
+  const playerX = playerBaseX * easeSlide - (1 - easeSlide) * 120;
+  const enemyX = enemyBaseX + (1 - easeSlide) * 120;
 
+  // Hit shake on catastrophe/critical hits
+  const shake = battle.tier === "catastrophe" ? Math.sin(now * 0.06) * 3
+    : battle.tier === "critical" || battle.tier === "legendary" ? Math.sin(now * 0.04) * 2 : 0;
+
+  // Idle bob
+  const playerBob = Math.sin(now * 0.004) * 1.5;
+  const enemyBob = Math.sin(now * 0.0035 + 1) * 1.5;
+
+  // ─── Shadows ───
+  drawShadow(ctx, playerX + spriteSize / 2, playerBaseY + spriteSize - 4, 18, 0.3);
+  drawShadow(ctx, enemyX + spriteSize / 2, enemyBaseY + spriteSize - 4, 18, 0.3);
+
+  // ─── Player sprite (bottom-left, facing right) ───
   if (player) {
     const frame = Math.floor(now * 0.004) % 4;
-    drawSprite(ctx, player, frame * 16, 0, 16, 16, playerX + shake, y, 64, 64);
-  }
-  if (enemy) {
-    const frame = Math.floor(now * 0.004) % 4;
-    drawSpriteFlip(ctx, enemy, frame * 16, 0, 16, 16, enemyX - shake, y, 64, 64, true);
+    drawSprite(ctx, player, frame * 16, 32, 16, 16, playerX + shake, playerBaseY + playerBob, spriteSize, spriteSize);
+  } else {
+    ctx.fillStyle = "#ffe0a3";
+    ctx.fillRect(playerX + 8, playerBaseY + 8, spriteSize - 16, spriteSize - 16);
   }
 
-  ctx.fillStyle = "rgba(10, 14, 24, 0.75)";
-  ctx.fillRect(24, MAP_PX - 74, MAP_PX - 48, 50);
-  ctx.strokeStyle = "rgba(246, 205, 118, 0.7)";
-  ctx.strokeRect(24, MAP_PX - 74, MAP_PX - 48, 50);
-  ctx.fillStyle = "#ffe6b0";
-  ctx.font = "700 18px sans-serif";
-  ctx.fillText(`Combat: ${battle.enemyName}`, 40, MAP_PX - 42);
+  // ─── Enemy sprite (top-right, flipped facing left) ───
+  if (enemy) {
+    const frame = Math.floor(now * 0.004) % 4;
+    const enemyAlpha = battle.enemyKilled && progress > 0.7 ? Math.max(0, 1 - (progress - 0.7) * 3.3) : 1;
+    ctx.globalAlpha = enemyAlpha;
+    drawSpriteFlip(ctx, enemy, frame * 16, 16, 16, 16, enemyX - shake, enemyBaseY + enemyBob, spriteSize, spriteSize, true);
+    ctx.globalAlpha = 1;
+  } else {
+    ctx.fillStyle = "#e08080";
+    ctx.fillRect(enemyX + 8, enemyBaseY + 8, spriteSize - 16, spriteSize - 16);
+  }
+
+  // ─── HP bars on canvas (Pokemon-style) ───
+  const hpBarW = 90;
+  const hpBarH = 7;
+  const hpColor = (pct: number) => pct > 0.5 ? "#54be8d" : pct > 0.25 ? "#e8c040" : "#e05040";
+
+  // Player HP bar (bottom-left panel area)
+  const pHpX = playerX - 10;
+  const pHpY = playerBaseY - 20;
+  const pHpPct = clamp(battle.playerStats.hpAfter / Math.max(1, battle.playerStats.maxHp), 0, 1);
+
+  ctx.fillStyle = "rgba(10,14,24,0.8)";
+  ctx.beginPath();
+  ctx.roundRect(pHpX - 6, pHpY - 18, hpBarW + 20, 38, 6);
+  ctx.fill();
+  ctx.fillStyle = "#f2f6ff";
+  ctx.font = "bold 11px sans-serif";
+  ctx.fillText(`${state.player.name}  Nv.${battle.playerStats.level}`, pHpX, pHpY - 5);
+  ctx.fillStyle = "rgba(30,30,40,0.9)";
+  ctx.beginPath();
+  ctx.roundRect(pHpX, pHpY, hpBarW, hpBarH, 3);
+  ctx.fill();
+  ctx.fillStyle = hpColor(pHpPct);
+  ctx.beginPath();
+  ctx.roundRect(pHpX, pHpY, hpBarW * pHpPct, hpBarH, 3);
+  ctx.fill();
+  ctx.fillStyle = "#ccc";
+  ctx.font = "10px sans-serif";
+  ctx.fillText(`${battle.playerStats.hpAfter}/${battle.playerStats.maxHp}`, pHpX + hpBarW + 4, pHpY + 7);
+
+  // Enemy HP bar (top-right panel area)
+  const eHpX = enemyX - 10;
+  const eHpY = enemyBaseY - 20;
+  const eHpPct = clamp(battle.enemyStats.hpAfter / Math.max(1, battle.enemyStats.maxHp), 0, 1);
+
+  ctx.fillStyle = "rgba(10,14,24,0.8)";
+  ctx.beginPath();
+  ctx.roundRect(eHpX - 6, eHpY - 18, hpBarW + 20, 38, 6);
+  ctx.fill();
+  ctx.fillStyle = "#f2f6ff";
+  ctx.font = "bold 11px sans-serif";
+  ctx.fillText(`${battle.enemyName}  Nv.${battle.enemyStats.level}`, eHpX, eHpY - 5);
+  ctx.fillStyle = "rgba(30,30,40,0.9)";
+  ctx.beginPath();
+  ctx.roundRect(eHpX, eHpY, hpBarW, hpBarH, 3);
+  ctx.fill();
+  ctx.fillStyle = hpColor(eHpPct);
+  ctx.beginPath();
+  ctx.roundRect(eHpX, eHpY, hpBarW * eHpPct, hpBarH, 3);
+  ctx.fill();
+  ctx.fillStyle = "#ccc";
+  ctx.font = "10px sans-serif";
+  ctx.fillText(`${battle.enemyStats.hpAfter}/${battle.enemyStats.maxHp}`, eHpX + hpBarW + 4, eHpY + 7);
+
+  // ─── Damage flash numbers ───
+  if (battle.enemyDamageTaken > 0 && progress > 0.3 && progress < 0.85) {
+    const dmgAlpha = Math.min(1, (progress - 0.3) * 5) * Math.max(0, 1 - (progress - 0.6) * 4);
+    const dmgY = enemyBaseY - 10 - (progress - 0.3) * 40;
+    ctx.globalAlpha = dmgAlpha;
+    ctx.fillStyle = "#ff4444";
+    ctx.font = "bold 18px sans-serif";
+    ctx.fillText(`-${battle.enemyDamageTaken}`, enemyX + spriteSize / 2 - 10, dmgY);
+    ctx.globalAlpha = 1;
+  }
+  if (battle.playerDamageTaken > 0 && progress > 0.3 && progress < 0.85) {
+    const dmgAlpha = Math.min(1, (progress - 0.3) * 5) * Math.max(0, 1 - (progress - 0.6) * 4);
+    const dmgY = playerBaseY - 10 - (progress - 0.3) * 40;
+    ctx.globalAlpha = dmgAlpha;
+    ctx.fillStyle = "#ff4444";
+    ctx.font = "bold 18px sans-serif";
+    ctx.fillText(`-${battle.playerDamageTaken}`, playerX + spriteSize / 2 - 10, dmgY);
+    ctx.globalAlpha = 1;
+  }
+
+  // ─── K.O. text for killed enemy ───
+  if (battle.enemyKilled && progress > 0.65) {
+    const koAlpha = Math.min(1, (progress - 0.65) * 4);
+    ctx.globalAlpha = koAlpha;
+    ctx.fillStyle = "#ff3b3b";
+    ctx.font = "bold 28px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("K.O.!", enemyX + spriteSize / 2, enemyBaseY + spriteSize / 2);
+    ctx.textAlign = "start";
+    ctx.globalAlpha = 1;
+  }
 }
 
 function drawDecor(

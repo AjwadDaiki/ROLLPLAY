@@ -38,14 +38,23 @@ export const attackVerb: VerbHandler = {
     }
 
     if (tier === "catastrophe") {
-      // Self-damage on critical fail
+      // Self-damage on critical fail — the opposite happens
       ops.push({ type: "adjust_player_gold", delta: 0, reason: "Echec critique au combat" });
-      bubbles.push(makeSpeechBubble(`actor:${actor.id}`, actor.name, "Pathethique.", "speech", 1800));
+      bubbles.push(makeSpeechBubble(`actor:${actor.id}`, actor.name, "Pathethique. Tu te blesses tout seul.", "speech", 1800));
     } else if (tier === "failure") {
-      bubbles.push(makeSpeechBubble(`actor:${actor.id}`, actor.name, "Rate.", "speech", 1600));
+      // Miss with minor negative — enemy gets a free hit
+      bubbles.push(makeSpeechBubble(`actor:${actor.id}`, actor.name, "C est tout ?", "speech", 1600));
+    } else if (tier === "miss") {
+      // Clean miss — nothing bad, nothing good
+      bubbles.push(makeSpeechBubble(`actor:${actor.id}`, actor.name, "...", "thought", 1200));
     } else {
-      // Hit - no direct state mutation, this is handled by applyOutcome compatibility layer
-      bubbles.push(makeSpeechBubble(`actor:${actor.id}`, actor.name, actor.hostile ? "Argh !" : "Qu est-ce qui te prend ?", "speech", 1800));
+      // Hit — success, critical, legendary
+      const reactions = tier === "legendary"
+        ? "Im... impossible !"
+        : tier === "critical"
+          ? "Argh... bien joue."
+          : actor.hostile ? "Argh !" : "Qu est-ce qui te prend ?";
+      bubbles.push(makeSpeechBubble(`actor:${actor.id}`, actor.name, reactions, "speech", 1800));
     }
 
     return {
