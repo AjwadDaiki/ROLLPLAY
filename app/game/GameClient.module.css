@@ -218,6 +218,30 @@
   border-color: rgba(255, 157, 134, 0.52);
 }
 
+.statsRow > div[data-accent="gold"] {
+  border-color: rgba(255, 215, 0, 0.52);
+  background:
+    linear-gradient(180deg, rgba(30, 28, 18, 0.95), rgba(20, 18, 12, 0.9)),
+    radial-gradient(circle at top left, rgba(255, 215, 0, 0.16), transparent 38%);
+}
+
+.statsRow > div[data-accent="gold"] strong {
+  color: #ffe082;
+}
+
+.statsRow > div[data-accent="rank"] {
+  border-color: rgba(180, 160, 255, 0.52);
+  background:
+    linear-gradient(180deg, rgba(28, 24, 48, 0.95), rgba(20, 16, 38, 0.9)),
+    radial-gradient(circle at top left, rgba(180, 160, 255, 0.16), transparent 38%);
+}
+
+.statsRow > div[data-accent="rank"] strong {
+  color: #d4c8ff;
+  font-size: 15px;
+  letter-spacing: 0.05em;
+}
+
 .statsRow img {
   width: 14px;
   height: 14px;
@@ -909,6 +933,16 @@
 .logNpc .logTag,
 .logNpc {
   color: #cfe7ae;
+}
+
+.logCombat .logTag,
+.logCombat {
+  color: #ff9696;
+}
+
+.logEnemy .logTag,
+.logEnemy {
+  color: #ff7a7a;
 }
 
 .logMisc .logTag,
