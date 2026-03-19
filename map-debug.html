@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>ROLLPLAY - Map Debug Viewer</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0b1221; color: #eef2ff; font-family: monospace; padding: 12px; }
+  h1 { font-size: 16px; color: #ffe4b1; margin-bottom: 8px; }
+  .controls { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; align-items: center; }
+  .controls label { font-size: 12px; cursor: pointer; }
+  .controls input[type=checkbox] { margin-right: 4px; }
+  #info { font-size: 11px; color: #9cb0db; margin-bottom: 8px; min-height: 18px; }
+  canvas { border: 1px solid rgba(221,181,98,0.48); cursor: crosshair; image-rendering: pixelated; }
+  .legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; font-size: 11px; }
+  .legend-item { display: flex; align-items: center; gap: 4px; }
+  .legend-swatch { width: 14px; height: 14px; border: 1px solid #555; border-radius: 2px; }
+</style>
+</head>
+<body>
+<h1>ROLLPLAY Map Debug Viewer (48x48 tiles)</h1>
+<div class="controls">
+  <label><input type="checkbox" id="showGrid" checked> Grille</label>
+  <label><input type="checkbox" id="showChunks" checked> Chunks</label>
+  <label><input type="checkbox" id="showRoads" checked> Routes</label>
+  <label><input type="checkbox" id="showBuildings" checked> Batiments</label>
+  <label><input type="checkbox" id="showProps" checked> Props</label>
+  <label><input type="checkbox" id="showNpcs" checked> NPCs</label>
+  <label><input type="checkbox" id="showPois" checked> POIs</label>
+  <label><input type="checkbox" id="showDecors" checked> Decors</label>
+  <label><input type="checkbox" id="showBlocked" checked> Blocked</label>
+  <label><input type="checkbox" id="showServicePts"> Service Points</label>
+  <label><input type="checkbox" id="showLabels" checked> Labels</label>
+</div>
+<div id="info">Survolez la map pour voir les infos de chaque tile.</div>
+<canvas id="map" width="768" height="768"></canvas>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-swatch" style="background:#5ea461"></div> Herbe</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#4b8d50"></div> Foret</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#c79b5c"></div> Desert</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#d9b17e"></div> Village</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#b48f66"></div> Route</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#44739d"></div> Eau</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#6e6d78"></div> Donjon</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#6a4747"></div> Boss</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:rgba(255,0,0,0.4)"></div> Blocked</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#ff0;border-color:#aa0"></div> POI</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#0af"></div> NPC</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#f80"></div> Animal</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#c66;border-radius:50%"></div> Service Point</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#0f0"></div> Spawn (24,25)</div>
+</div>
+
+<script>
+const W = 48, H = 48, CHUNK = 16;
+const PX = 768 / W; // 16px per tile
+
+// ======== TERRAIN DATA ========
+const TERRAIN_COLORS = {
+  grass: "#5ea461", forest: "#4b8d50", desert: "#c79b5c", village: "#d9b17e",
+  road: "#b48f66", water: "#44739d", stone: "#6e6d78", dungeon: "#6e6d78", boss: "#6a4747"
+};
+
+const PROP_COLORS = { tree: "#2d6e31", stump: "#8b7355", rock: "#8a8a8a", cactus: "#6da06d", crate: "#a08040" };
+
+// Initialize tiles
+const tiles = [];
+for (let y = 0; y < H; y++) {
+  for (let x = 0; x < W; x++) {
+    tiles[y * W + x] = { terrain: "grass", blocked: false, poi: null, prop: "none" };
+  }
+}
+
+function paintScreen(sx, sy, terrain) {
+  for (let dy = 0; dy < CHUNK; dy++) {
+    for (let dx = 0; dx < CHUNK; dx++) {
+      const x = sx * CHUNK + dx, y = sy * CHUNK + dy;
+      tiles[y * W + x].terrain = terrain;
+    }
+  }
+}
+
+function paintRoadH(yc, x1, x2) {
+  for (let x = x1; x <= x2; x++) { tiles[yc * W + x].terrain = "road"; tiles[(yc-1) * W + x].terrain = "road"; }
+}
+function paintRoadV(xc, y1, y2) {
+  for (let y = y1; y <= y2; y++) { tiles[y * W + xc].terrain = "road"; tiles[y * W + (xc-1)].terrain = "road"; }
+}
+
+// Paint screens
+paintScreen(0, 0, "forest"); paintScreen(1, 0, "grass"); paintScreen(2, 0, "desert");
+paintScreen(0, 1, "forest"); paintScreen(1, 1, "village"); paintScreen(2, 1, "desert");
+paintScreen(0, 2, "forest"); paintScreen(1, 2, "dungeon"); paintScreen(2, 2, "boss");
+
+// Roads
+paintRoadH(23, 1, W - 2);
+paintRoadV(23, 8, H - 2);
+
+// Water boundaries
+for (let x = 0; x < W; x++) { tiles[x].terrain = "water"; tiles[x].blocked = true; tiles[(H-1)*W+x].terrain = "water"; tiles[(H-1)*W+x].blocked = true; }
+for (let y = 0; y < H; y++) { tiles[y*W].terrain = "water"; tiles[y*W].blocked = true; tiles[y*W+W-1].terrain = "water"; tiles[y*W+W-1].blocked = true; }
+
+// ======== BUILDINGS (from mapBlueprints) ========
+const BUILDINGS = [
+  { id: "guild", kind: "house_a", x: 16, y: 17, w: 4, h: 4, serviceX: 17, serviceY: 21, label: "Guilde", poi: "guild" },
+  { id: "inn", kind: "house_b", x: 22, y: 17, w: 4, h: 4, serviceX: 24, serviceY: 21, label: "Auberge", poi: "inn" },
+  { id: "shop", kind: "house_d", x: 27, y: 17, w: 4, h: 4, serviceX: 28, serviceY: 21, label: "Boutique", poi: "shop" },
+  { id: "house_sw", kind: "house_b", x: 16, y: 26, w: 4, h: 4, serviceX: 20, serviceY: 28, label: null },
+  { id: "house_se", kind: "house_a", x: 27, y: 26, w: 4, h: 4, serviceX: 26, serviceY: 28, label: null },
+];
+
+// Apply building collision footprints
+const SOLID_DECOR_KINDS = ["house_a","house_b","house_c","house_d","forest_grove_a","forest_grove_b","ruin_a","ruin_b","stone_cluster","citadel_tower","fence_h","fence_v","well"];
+
+const ALL_DECORS = [
+  // Village buildings
+  ...BUILDINGS.map(b => ({ id: b.id, x: b.x, y: b.y, w: b.w, h: b.h, kind: b.kind })),
+  // Well
+  { id: "well", x: 23, y: 23, w: 2, h: 2, kind: "well" },
+  // Scenery decors
+  { id: "forest_grove_ancient_a", x: 2, y: 2, w: 4, h: 4, kind: "forest_grove_a" },
+  { id: "forest_grove_ancient_b", x: 9, y: 4, w: 4, h: 4, kind: "forest_grove_b" },
+  { id: "forest_grove_brume_a", x: 2, y: 18, w: 4, h: 4, kind: "forest_grove_a" },
+  { id: "forest_grove_brume_b", x: 9, y: 26, w: 4, h: 4, kind: "forest_grove_b" },
+  { id: "forest_grove_lisiere_a", x: 2, y: 34, w: 4, h: 4, kind: "forest_grove_a" },
+  { id: "highland_grove_a", x: 18, y: 4, w: 4, h: 4, kind: "forest_grove_b" },
+  { id: "highland_grove_b", x: 27, y: 8, w: 4, h: 4, kind: "forest_grove_a" },
+  { id: "dunes_ruin_secondary", x: 34, y: 18, w: 4, h: 4, kind: "ruin_b" },
+  { id: "dunes_stone_outcrop", x: 41, y: 34, w: 3, h: 3, kind: "stone_cluster" },
+  { id: "dungeon_cluster_west", x: 18, y: 35, w: 4, h: 4, kind: "stone_cluster" },
+  { id: "dungeon_cluster_south", x: 27, y: 41, w: 4, h: 4, kind: "stone_cluster" },
+  { id: "citadel_tower_nw", x: 35, y: 34, w: 2, h: 2, kind: "citadel_tower" },
+  { id: "citadel_tower_ne", x: 44, y: 34, w: 2, h: 2, kind: "citadel_tower" },
+  { id: "citadel_tower_sw", x: 35, y: 43, w: 2, h: 2, kind: "citadel_tower" },
+  { id: "citadel_tower_se", x: 44, y: 43, w: 2, h: 2, kind: "citadel_tower" },
+  { id: "citadel_cluster_west", x: 36, y: 38, w: 4, h: 4, kind: "stone_cluster" },
+  // Landmark structures
+  { id: "mesa_ruin", x: 35, y: 4, w: 4, h: 4, kind: "ruin_a" },
+  { id: "mesa_oasis", x: 40, y: 7, w: 4, h: 4, kind: "palm_cluster" },
+  { id: "dungeon_gate_structure", x: 23, y: 39, w: 2, h: 2, kind: "dungeon_gate" },
+  { id: "boss_gate_structure", x: 40, y: 40, w: 2, h: 2, kind: "boss_gate" },
+];
+
+// Apply collision footprints (matching enforceWorldCoherence FIXED order)
+for (const d of ALL_DECORS) {
+  if (!SOLID_DECOR_KINDS.includes(d.kind)) continue;
+  for (let dy = 0; dy < d.h; dy++) {
+    for (let dx = 0; dx < d.w; dx++) {
+      const tx = d.x + dx, ty = d.y + dy;
+      if (tx >= 0 && tx < W && ty >= 0 && ty < H) tiles[ty * W + tx].blocked = true;
+    }
+  }
+}
+
+// Clear roads (AFTER collision footprints - matching the fix)
+function clearRoad(axis, orientation) {
+  if (orientation === "vertical") {
+    for (let y = 1; y < H - 1; y++) { tiles[y*W+axis].blocked = false; tiles[y*W+axis].prop = "none"; tiles[y*W+(axis-1)].blocked = false; tiles[y*W+(axis-1)].prop = "none"; }
+  } else {
+    for (let x = 1; x < W - 1; x++) { tiles[axis*W+x].blocked = false; tiles[axis*W+x].prop = "none"; tiles[(axis-1)*W+x].blocked = false; tiles[(axis-1)*W+x].prop = "none"; }
+  }
+}
+clearRoad(23, "vertical"); clearRoad(24, "vertical");
+clearRoad(23, "horizontal"); clearRoad(24, "horizontal");
+
+// Unblock service points (new fix)
+for (const b of BUILDINGS) {
+  if (b.serviceX != null && b.serviceY != null) {
+    tiles[b.serviceY * W + b.serviceX].blocked = false;
+    tiles[b.serviceY * W + b.serviceX].prop = "none";
+  }
+}
+// Gate service points
+[{sx:24,sy:40},{sx:40,sy:40}].forEach(g => { tiles[g.sy*W+g.sx].blocked = false; });
+
+// ======== POIs ========
+const POIS = [
+  { poi: "guild", x: 17, y: 21, label: "Guilde" },
+  { poi: "inn", x: 24, y: 21, label: "Auberge" },
+  { poi: "shop", x: 28, y: 21, label: "Boutique" },
+  { poi: "camp", x: 24, y: 26, label: "Camp" },
+  { poi: "dungeon_gate", x: 24, y: 40, label: "Donjon" },
+  { poi: "boss_gate", x: 40, y: 40, label: "Citadelle" },
+  { poi: "house", x: 20, y: 28, label: null },
+  { poi: "house", x: 26, y: 28, label: null },
+];
+POIS.forEach(p => { tiles[p.y * W + p.x].poi = p.poi; tiles[p.y * W + p.x].blocked = false; });
+
+// ======== PROPS ========
+const PROPS = [
+  // Forest trees
+  ...[  [7,2],[14,4],[6,9],[13,8],[7,18],[13,19],[6,29],[14,29],[9,34],[14,37],[6,41],[13,42]].map(([x,y]) => ({x,y,type:"tree"})),
+  // Forest rocks
+  ...[[8,20],[12,21],[6,26],[11,30],[8,39],[12,43]].map(([x,y]) => ({x,y,type:"rock"})),
+  // Highland stumps
+  ...[[19,4],[22,6],[28,5],[30,8],[27,12]].map(([x,y]) => ({x,y,type:"stump"})),
+  // Highland rocks
+  ...[[18,10],[29,14],[31,9]].map(([x,y]) => ({x,y,type:"rock"})),
+  // Desert cactus
+  ...[[33,7],[35,9],[38,10],[42,8],[44,10],[35,13],[39,13],[43,12]].map(([x,y]) => ({x,y,type:"cactus"})),
+  // Desert rocks
+  ...[[34,18],[37,19],[41,18],[44,20],[35,35],[41,36]].map(([x,y]) => ({x,y,type:"rock"})),
+  // Dungeon debris
+  ...[[22,35],[24,37],[27,34],[26,43],[42,39]].map(([x,y]) => ({x,y,type:"rock"})),
+  // Dungeon crates
+  ...[[34,34],[36,35],[40,34],[42,36],[37,42],[44,43],[39,40]].map(([x,y]) => ({x,y,type:"crate"})),
+];
+PROPS.forEach(p => { tiles[p.y * W + p.x].prop = p.type; tiles[p.y * W + p.x].blocked = true; });
+
+// Clear props from roads again (props added after)
+clearRoad(23, "vertical"); clearRoad(24, "vertical");
+clearRoad(23, "horizontal"); clearRoad(24, "horizontal");
+
+// ======== NPCS ========
+const NPCS = [
+  { id: "npc_guild_master", name: "Maitre Guilde", x: 17, y: 22, kind: "npc" },
+  { id: "npc_shopkeeper", name: "Marchand", x: 28, y: 22, kind: "npc" },
+  { id: "npc_innkeeper", name: "Aubergiste", x: 24, y: 22, kind: "npc" },
+  { id: "npc_villager_a", name: "Villageois", x: 21, y: 27, kind: "npc" },
+  { id: "npc_villager_b", name: "Forgeron", x: 25, y: 29, kind: "npc" },
+  { id: "npc_guard", name: "Garde", x: 21, y: 23, kind: "npc" },
+  { id: "npc_child", name: "Enfant", x: 25, y: 27, kind: "npc" },
+  { id: "animal_cat", name: "Chat", x: 24, y: 29, kind: "animal" },
+  { id: "animal_dog", name: "Chien", x: 10, y: 21, kind: "animal" },
+  { id: "animal_chicken", name: "Poulet", x: 39, y: 21, kind: "animal" },
+  { id: "animal_frog", name: "Grenouille", x: 22, y: 36, kind: "animal" },
+];
+
+const SCREEN_NAMES = {
+  "0,0": "Bois Ancien", "1,0": "Hauteurs", "2,0": "Mesa Brulee",
+  "0,1": "Foret Brume", "1,1": "Village", "2,1": "Dunes Rouges",
+  "0,2": "Foret Sud", "1,2": "Donjon", "2,2": "Citadelle Demon"
+};
+
+const SPAWN = { x: 24, y: 25 };
+
+// ======== RENDERING ========
+const canvas = document.getElementById("map");
+const ctx = canvas.getContext("2d");
+const infoEl = document.getElementById("info");
+
+function getCheckbox(id) { return document.getElementById(id).checked; }
+
+function draw() {
+  const showGrid = getCheckbox("showGrid");
+  const showChunks = getCheckbox("showChunks");
+  const showRoads = getCheckbox("showRoads");
+  const showBuildings = getCheckbox("showBuildings");
+  const showPropsLayer = getCheckbox("showProps");
+  const showNpcs = getCheckbox("showNpcs");
+  const showPoisLayer = getCheckbox("showPois");
+  const showDecors = getCheckbox("showDecors");
+  const showBlocked = getCheckbox("showBlocked");
+  const showServicePts = getCheckbox("showServicePts");
+  const showLabels = getCheckbox("showLabels");
+
+  ctx.clearRect(0, 0, 768, 768);
+
+  // Draw terrain
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const t = tiles[y * W + x];
+      const px = x * PX, py = y * PX;
+      ctx.fillStyle = TERRAIN_COLORS[t.terrain] || "#333";
+      ctx.fillRect(px, py, PX, PX);
+
+      // Road highlight
+      if (showRoads && t.terrain === "road") {
+        ctx.fillStyle = "rgba(255,240,200,0.12)";
+        ctx.fillRect(px + 2, py + 2, PX - 4, PX - 4);
+      }
+
+      // Blocked overlay
+      if (showBlocked && t.blocked) {
+        ctx.fillStyle = "rgba(255,0,0,0.28)";
+        ctx.fillRect(px, py, PX, PX);
+      }
+    }
+  }
+
+  // Draw decors outlines
+  if (showDecors) {
+    for (const d of ALL_DECORS) {
+      const px = d.x * PX, py = d.y * PX;
+      const isBuilding = d.kind.startsWith("house_");
+      ctx.strokeStyle = isBuilding ? "rgba(255,200,80,0.6)" : "rgba(150,200,255,0.4)";
+      ctx.lineWidth = 1;
+      ctx.setLineDash(isBuilding ? [] : [2, 2]);
+      ctx.strokeRect(px + 0.5, py + 0.5, d.w * PX - 1, d.h * PX - 1);
+    }
+    ctx.setLineDash([]);
+  }
+
+  // Draw buildings fill
+  if (showBuildings) {
+    for (const b of BUILDINGS) {
+      ctx.fillStyle = "rgba(180,140,60,0.25)";
+      ctx.fillRect(b.x * PX, b.y * PX, b.w * PX, b.h * PX);
+      ctx.strokeStyle = "rgba(255,200,80,0.7)";
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(b.x * PX, b.y * PX, b.w * PX, b.h * PX);
+    }
+  }
+
+  // Draw props
+  if (showPropsLayer) {
+    for (const p of PROPS) {
+      const px = p.x * PX + PX / 2, py = p.y * PX + PX / 2;
+      ctx.fillStyle = PROP_COLORS[p.type] || "#888";
+      if (p.type === "tree") {
+        ctx.beginPath(); ctx.arc(px, py, 4, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#1a4a1d"; ctx.fillRect(px - 1, py - 1, 2, 5);
+      } else if (p.type === "cactus") {
+        ctx.fillRect(px - 2, py - 3, 4, 6);
+      } else if (p.type === "crate") {
+        ctx.fillRect(px - 3, py - 3, 6, 6);
+      } else {
+        ctx.beginPath(); ctx.arc(px, py, 3, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+  }
+
+  // Draw POIs
+  if (showPoisLayer) {
+    for (const p of POIS) {
+      const px = p.x * PX + PX / 2, py = p.y * PX + PX / 2;
+      ctx.fillStyle = "rgba(255,255,0,0.7)";
+      ctx.beginPath();
+      ctx.moveTo(px, py - 5); ctx.lineTo(px + 4, py + 2); ctx.lineTo(px - 4, py + 2);
+      ctx.closePath(); ctx.fill();
+      if (showLabels && p.label) {
+        ctx.fillStyle = "#ffe082";
+        ctx.font = "bold 8px monospace";
+        ctx.textAlign = "center";
+        ctx.fillText(p.label, px, py - 7);
+      }
+    }
+  }
+
+  // Draw service points
+  if (showServicePts) {
+    for (const b of BUILDINGS) {
+      if (b.serviceX == null) continue;
+      const px = b.serviceX * PX + PX / 2, py = b.serviceY * PX + PX / 2;
+      ctx.fillStyle = tiles[b.serviceY * W + b.serviceX].blocked ? "#f00" : "#0f0";
+      ctx.beginPath(); ctx.arc(px, py, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = "#fff";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+    // Gate service points
+    [{x:24,y:40},{x:40,y:40}].forEach(g => {
+      const px = g.x * PX + PX / 2, py = g.y * PX + PX / 2;
+      ctx.fillStyle = tiles[g.y * W + g.x].blocked ? "#f00" : "#0f0";
+      ctx.beginPath(); ctx.arc(px, py, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = "#fff"; ctx.lineWidth = 1; ctx.stroke();
+    });
+  }
+
+  // Draw NPCs
+  if (showNpcs) {
+    for (const n of NPCS) {
+      const px = n.x * PX + PX / 2, py = n.y * PX + PX / 2;
+      ctx.fillStyle = n.kind === "animal" ? "#f80" : "#0af";
+      ctx.beginPath(); ctx.arc(px, py, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = "#fff"; ctx.lineWidth = 0.8; ctx.stroke();
+      if (showLabels) {
+        ctx.fillStyle = n.kind === "animal" ? "#ffc080" : "#80d0ff";
+        ctx.font = "7px monospace";
+        ctx.textAlign = "center";
+        ctx.fillText(n.name, px, py - 6);
+      }
+    }
+  }
+
+  // Draw spawn point
+  const spx = SPAWN.x * PX + PX / 2, spy = SPAWN.y * PX + PX / 2;
+  ctx.fillStyle = "#0f0";
+  ctx.beginPath(); ctx.arc(spx, spy, 5, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.fillStyle = "#0f0";
+  ctx.font = "bold 8px monospace"; ctx.textAlign = "center";
+  ctx.fillText("SPAWN", spx, spy - 8);
+
+  // Grid lines
+  if (showGrid) {
+    ctx.strokeStyle = "rgba(255,255,255,0.06)";
+    ctx.lineWidth = 0.5;
+    for (let x = 0; x <= W; x++) { ctx.beginPath(); ctx.moveTo(x * PX, 0); ctx.lineTo(x * PX, 768); ctx.stroke(); }
+    for (let y = 0; y <= H; y++) { ctx.beginPath(); ctx.moveTo(0, y * PX); ctx.lineTo(768, y * PX); ctx.stroke(); }
+  }
+
+  // Chunk boundaries
+  if (showChunks) {
+    ctx.strokeStyle = "rgba(255,200,80,0.45)";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 4]);
+    for (let cx = 0; cx <= 3; cx++) { ctx.beginPath(); ctx.moveTo(cx * CHUNK * PX, 0); ctx.lineTo(cx * CHUNK * PX, 768); ctx.stroke(); }
+    for (let cy = 0; cy <= 3; cy++) { ctx.beginPath(); ctx.moveTo(0, cy * CHUNK * PX); ctx.lineTo(768, cy * CHUNK * PX); ctx.stroke(); }
+    ctx.setLineDash([]);
+
+    // Screen names
+    if (showLabels) {
+      ctx.font = "bold 10px monospace";
+      ctx.fillStyle = "rgba(255,230,160,0.65)";
+      ctx.textAlign = "center";
+      for (let sy = 0; sy < 3; sy++) {
+        for (let sx = 0; sx < 3; sx++) {
+          const name = SCREEN_NAMES[`${sx},${sy}`] || "";
+          ctx.fillText(name, (sx * CHUNK + CHUNK / 2) * PX, (sy * CHUNK + 2) * PX);
+        }
+      }
+    }
+  }
+}
+
+// Mouse hover info
+canvas.addEventListener("mousemove", (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const mx = (e.clientX - rect.left) * (768 / rect.width);
+  const my = (e.clientY - rect.top) * (768 / rect.height);
+  const tx = Math.floor(mx / PX), ty = Math.floor(my / PX);
+  if (tx < 0 || tx >= W || ty < 0 || ty >= H) return;
+  const t = tiles[ty * W + tx];
+  const npc = NPCS.find(n => n.x === tx && n.y === ty);
+  const poi = POIS.find(p => p.x === tx && p.y === ty);
+  const prop = PROPS.find(p => p.x === tx && p.y === ty);
+  const building = BUILDINGS.find(b => tx >= b.x && tx < b.x + b.w && ty >= b.y && ty < b.y + b.h);
+  const decor = ALL_DECORS.find(d => tx >= d.x && tx < d.x + d.w && ty >= d.y && ty < d.y + d.h);
+  const chunk = `(${Math.floor(tx / CHUNK)},${Math.floor(ty / CHUNK)})`;
+
+  let info = `Tile (${tx},${ty}) | Chunk ${chunk} | Terrain: ${t.terrain} | ${t.blocked ? "BLOCKED" : "walkable"}`;
+  if (t.poi) info += ` | POI: ${t.poi}`;
+  if (t.prop !== "none") info += ` | Prop: ${t.prop}`;
+  if (npc) info += ` | NPC: ${npc.name} (${npc.kind})`;
+  if (poi) info += ` | POI Label: ${poi.label || "none"}`;
+  if (prop) info += ` | Prop: ${prop.type}`;
+  if (building) info += ` | Building: ${building.id} (service: ${building.serviceX},${building.serviceY})`;
+  if (decor && !building) info += ` | Decor: ${decor.id} (${decor.kind})`;
+  if (tx === SPAWN.x && ty === SPAWN.y) info += " | ** SPAWN POINT **";
+  infoEl.textContent = info;
+});
+
+// Redraw on checkbox change
+document.querySelectorAll("input[type=checkbox]").forEach(cb => cb.addEventListener("change", draw));
+
+// Initial draw
+draw();
+</script>
+</body>
+</html>

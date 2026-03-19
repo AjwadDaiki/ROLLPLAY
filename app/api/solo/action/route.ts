@@ -29,9 +29,25 @@ export async function POST(request: NextRequest) {
     }
 
     const hydratedClientState = hydrateSoloState(state);
-    const safeState =
-      getSoloSession(hydratedClientState.serverSessionId) ??
-      hydratedClientState;
+    const serverSession = getSoloSession(hydratedClientState.serverSessionId);
+    // Merge: use the server session as base (authoritative for non-movement state)
+    // but always adopt the client's player position, since keyboard movement
+    // (applyFreeMoveStep) happens purely on the client and is never sent to the server.
+    const safeState = serverSession
+      ? {
+          ...serverSession,
+          player: {
+            ...serverSession.player,
+            x: hydratedClientState.player.x,
+            y: hydratedClientState.player.y,
+          },
+          // Also sync client-side changes that happen between API calls
+          revealedChunks: hydratedClientState.revealedChunks,
+          log: hydratedClientState.log,
+          lastAction: hydratedClientState.lastAction,
+          lastNarration: hydratedClientState.lastNarration,
+        }
+      : hydratedClientState;
     const safeInteraction: PlayerInteractionRequest = interaction
       ? {
           ...interaction,

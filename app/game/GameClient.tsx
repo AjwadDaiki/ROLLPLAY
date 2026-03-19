@@ -145,6 +145,7 @@ type PlayerRenderState = {
   moveStartAt: number;
   moveEndAt: number;
   facing: Facing;
+  intendedFacing?: Facing;
 };
 
 type SceneMode = "world" | "dungeon" | "boss";
@@ -483,15 +484,24 @@ export default function GameClient() {
     const originY = prev.moveEndAt > now ? currentPose.y : prev.y;
     const dx = state.player.x - originX;
     const dy = state.player.y - originY;
-    let facing = prev.facing;
-    if (Math.abs(dx) >= Math.abs(dy) && dx !== 0) {
-      facing = dx > 0 ? "right" : "left";
-    } else if (dy !== 0) {
-      facing = dy > 0 ? "down" : "up";
+    // Prefer explicit intendedFacing (set by keyboard/path movement) over interpolated delta
+    let facing = prev.intendedFacing ?? prev.facing;
+    if (!prev.intendedFacing) {
+      if (Math.abs(dx) >= Math.abs(dy) && dx !== 0) {
+        facing = dx > 0 ? "right" : "left";
+      } else if (dy !== 0) {
+        facing = dy > 0 ? "down" : "up";
+      }
     }
 
     const movedTiles = Math.abs(state.player.x - prev.x) + Math.abs(state.player.y - prev.y);
-    const animateMove = movedTiles > 0 && movedTiles <= 20;
+    // Only animate short moves that stay within the same chunk.
+    // Cross-chunk jumps (respawn, server correction, teleport) must snap instantly
+    // to prevent the sprite from being drawn off-screen during interpolation.
+    const prevChunk = chunkOf(Math.round(prev.x), Math.round(prev.y));
+    const nextChunk = chunkOf(state.player.x, state.player.y);
+    const sameChunk = prevChunk.cx === nextChunk.cx && prevChunk.cy === nextChunk.cy;
+    const animateMove = movedTiles > 0 && movedTiles <= 3 || (movedTiles > 0 && movedTiles <= 20 && sameChunk);
     const moveDuration = animateMove ? clamp(105 + movedTiles * 18, 105, 280) : 0;
     playerRenderRef.current = {
       x: state.player.x,
@@ -501,6 +511,7 @@ export default function GameClient() {
       moveStartAt: now,
       moveEndAt: animateMove ? now + moveDuration : now,
       facing,
+      intendedFacing: undefined,
     };
   }, [state]);
 
@@ -887,6 +898,12 @@ export default function GameClient() {
         damageTaken = Math.max(0, prev.player.hp - next.player.hp);
         return next;
       });
+      // Always face the direction pressed, even if movement was blocked (wall/obstacle)
+      const render = playerRenderRef.current;
+      if (render) {
+        render.intendedFacing = direction as Facing;
+        render.facing = direction as Facing;
+      }
       if (!moved) return;
       setIntentSummary(directionPrompt(direction));
       setPinnedActorId(null);
@@ -1104,11 +1121,20 @@ export default function GameClient() {
       }
       let shouldContinue = true;
       let damageTaken = 0;
+      let stepFacing: Facing | null = null;
       setState((prev) => {
         if (!prev) return prev;
         if (prev.status !== "playing") {
           shouldContinue = false;
           return prev;
+        }
+        // Compute facing from step direction before applying movement
+        const sdx = currentStep.x - prev.player.x;
+        const sdy = currentStep.y - prev.player.y;
+        if (Math.abs(sdx) >= Math.abs(sdy) && sdx !== 0) {
+          stepFacing = sdx > 0 ? "right" : "left";
+        } else if (sdy !== 0) {
+          stepFacing = sdy > 0 ? "down" : "up";
         }
         const next = applyFreeMoveStep(prev, currentStep);
         next.lastAction = "Deplacement";
@@ -1120,6 +1146,14 @@ export default function GameClient() {
         return next;
       });
 
+      // Apply explicit facing from step direction
+      if (stepFacing) {
+        const render = playerRenderRef.current;
+        if (render) {
+          render.intendedFacing = stepFacing;
+        }
+      }
+
       if (damageTaken > 0) {
         pushPlayerDamageFx(damageTaken);
       }
@@ -1129,7 +1163,11 @@ export default function GameClient() {
         movementTimerRef.current = null;
         setMovementBusy(false);
         if (shouldContinue && stepIndex >= sanitizedPath.length && onComplete) {
-          window.setTimeout(onComplete, 48);
+          // Verify player is still alive before executing post-movement callback
+          const currentState = stateRef.current;
+          if (currentState && currentState.status === "playing" && currentState.player.hp > 0) {
+            window.setTimeout(onComplete, 48);
+          }
         }
         return;
       }
@@ -1763,7 +1801,17 @@ export default function GameClient() {
           : findPathToTile(state, target.x, target.y, { maxSteps: 320 }) ?? [];
       if (path.length > 0) {
         runCodeMovement(path, `Tu te rapproches de ${target.name}.`, () => {
-          void submitActionRef.current?.(prompt, interaction);
+          // Rebuild interaction with fresh coordinates (target may have wandered)
+          const freshState = stateRef.current;
+          if (!freshState || freshState.status !== "playing") return;
+          const freshTarget = findWorldEntityByRef(freshState, target.ref);
+          const freshInteraction: PlayerInteractionRequest = {
+            ...interaction,
+            targetTile: freshTarget
+              ? { x: freshTarget.x, y: freshTarget.y }
+              : { x: target.x, y: target.y },
+          };
+          void submitActionRef.current?.(prompt, freshInteraction);
         });
         return;
       }
@@ -1840,7 +1888,7 @@ export default function GameClient() {
         </div>
 
         <div className={styles.statsRow}>
-          <div>
+          <div data-accent="gold">
             <img src={BASE_ASSETS.gold} alt="" />
             <small>Or</small>
             <strong>{state.player.gold}</strong>
@@ -1866,7 +1914,7 @@ export default function GameClient() {
             <small>Aura</small>
             <strong>{state.player.aura}</strong>
           </div>
-          <div>
+          <div data-accent="rank">
             <small>Rang</small>
             <strong>{rank}</strong>
           </div>
@@ -2981,25 +3029,53 @@ function drawDeathFx(
   offsetY: number,
   now: number
 ): void {
-  const progress = clamp((now - entry.startedAt) / 860, 0, 1);
+  const elapsed = now - entry.startedAt;
+  const progress = clamp(elapsed / 1100, 0, 1);
   if (progress >= 1) return;
   const px = offsetX + (entry.x - startX) * TILE_PX + TILE_PX / 2;
   const py = offsetY + (entry.y - startY) * TILE_PX + TILE_PX / 2;
-  const ring = 6 + progress * 22;
-  const alpha = 1 - progress;
   const color = entry.hostile ? "245, 196, 110" : "179, 215, 255";
 
   ctx.save();
+
+  // Phase 1: White flash (first 120ms)
+  if (elapsed < 120) {
+    const flashAlpha = 0.7 * (1 - elapsed / 120);
+    ctx.fillStyle = `rgba(255, 255, 255, ${flashAlpha})`;
+    ctx.fillRect(px - TILE_PX / 2, py - TILE_PX / 2, TILE_PX, TILE_PX);
+  }
+
+  // Phase 2: Expanding ring with fade
+  const ring = 6 + progress * 24;
+  const alpha = 1 - progress;
   ctx.strokeStyle = `rgba(${color}, ${0.82 * alpha})`;
-  ctx.fillStyle = `rgba(${color}, ${0.22 * alpha})`;
+  ctx.fillStyle = `rgba(${color}, ${0.18 * alpha})`;
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.arc(px, py, ring, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
-  ctx.fillStyle = `rgba(255, 255, 255, ${0.74 * alpha})`;
+
+  // Phase 3: Cross mark (fading)
+  ctx.fillStyle = `rgba(255, 255, 255, ${0.7 * alpha})`;
   ctx.fillRect(px - 1, py - 10, 2, 20);
   ctx.fillRect(px - 10, py - 1, 20, 2);
+
+  // Phase 4: Scatter particles
+  const seed = hashFloat(entry.id);
+  for (let i = 0; i < 5; i += 1) {
+    const angle = (seed + i * 1.256) * Math.PI * 2;
+    const dist = 4 + progress * 20 * (0.7 + (seed + i * 0.2) % 1 * 0.6);
+    const partX = px + Math.cos(angle) * dist;
+    const partY = py + Math.sin(angle) * dist - progress * 8;
+    const partAlpha = Math.max(0, 0.8 - progress * 1.2);
+    const partSize = 2.5 * (1 - progress * 0.6);
+    ctx.fillStyle = `rgba(${color}, ${partAlpha})`;
+    ctx.beginPath();
+    ctx.arc(partX, partY, partSize, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
   ctx.restore();
 }
 
@@ -3056,6 +3132,8 @@ function parseLogEntry(line: string): { tag: string; body: string; className: st
   if (tag === "SYSTEM") return { tag, body, className: "logSystem" };
   if (tag === "MJ") return { tag, body, className: "logMj" };
   if (tag === "EVENT") return { tag, body, className: "logEvent" };
+  if (tag === "COMBAT") return { tag, body, className: "logCombat" };
+  if (tag === "ENNEMI") return { tag, body, className: "logEnemy" };
   if (tag === "TOI") return { tag, body, className: "logPlayer" };
   return { tag, body, className: "logNpc" };
 }
@@ -3363,8 +3441,11 @@ function drawChunkScene(
       ctx.fillStyle = "rgba(118, 90, 58, 0.08)";
       ctx.fillRect(px, py, TILE_PX, TILE_PX);
     } else if (tile.terrain === "road") {
-      ctx.fillStyle = "rgba(95, 62, 29, 0.1)";
+      ctx.fillStyle = "rgba(95, 62, 29, 0.16)";
       ctx.fillRect(px, py, TILE_PX, TILE_PX);
+      // Subtle lighter center line for road readability
+      ctx.fillStyle = "rgba(180, 150, 100, 0.08)";
+      ctx.fillRect(px + 4, py + 4, TILE_PX - 8, TILE_PX - 8);
     }
 
     for (const layer of getPropLayers(tile.prop, entry.x, entry.y, tile.terrain)) {
@@ -3529,6 +3610,13 @@ function drawChunkScene(
           TILE_PX - 4,
           !!movingLeft
         );
+      }
+
+      // Draw role badge for key NPCs
+      drawActorBadge(ctx, entry.actor, localX, localY + idleBob);
+      // Draw hostile indicator
+      if (entry.actor.hostile && entry.actor.alive) {
+        drawHostileIndicator(ctx, localX + TILE_PX / 2, localY + idleBob - 6, now);
       }
 
       const actorBubbles = speechBubbles.filter(
@@ -3875,6 +3963,67 @@ function drawShadow(
   ctx.beginPath();
   ctx.ellipse(x, y, radius, radius * 0.42, 0, 0, Math.PI * 2);
   ctx.fill();
+}
+
+function drawActorBadge(
+  ctx: CanvasRenderingContext2D,
+  actor: WorldActor,
+  localX: number,
+  localY: number
+): void {
+  let symbol: string | null = null;
+  let badgeColor = "rgba(255,255,255,0.85)";
+  if (actor.id === "npc_shopkeeper") {
+    symbol = "\u25CF"; // coin dot
+    badgeColor = "rgba(255,215,0,0.92)";
+  } else if (actor.id === "npc_guild_master") {
+    symbol = "\u2694"; // crossed swords
+    badgeColor = "rgba(100,180,255,0.92)";
+  } else if (actor.id === "npc_innkeeper") {
+    symbol = "\u2665"; // heart
+    badgeColor = "rgba(255,140,160,0.92)";
+  } else if (actor.id === "npc_guard_road") {
+    symbol = "\u2666"; // diamond (shield)
+    badgeColor = "rgba(255,220,100,0.92)";
+  }
+  if (!symbol) return;
+
+  const cx = localX + TILE_PX / 2;
+  const cy = localY - 4;
+  ctx.save();
+  ctx.fillStyle = "rgba(0,0,0,0.55)";
+  ctx.beginPath();
+  ctx.arc(cx, cy, 6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = badgeColor;
+  ctx.font = "bold 8px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(symbol, cx, cy + 0.5);
+  ctx.restore();
+}
+
+function drawHostileIndicator(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  now: number
+): void {
+  const pulse = 0.6 + 0.4 * Math.sin(now * 0.005);
+  ctx.save();
+  ctx.fillStyle = `rgba(255, 50, 50, ${pulse * 0.9})`;
+  ctx.beginPath();
+  // Small diamond shape
+  ctx.moveTo(cx, cy - 5);
+  ctx.lineTo(cx + 4, cy);
+  ctx.lineTo(cx, cy + 5);
+  ctx.lineTo(cx - 4, cy);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = `rgba(200, 0, 0, ${pulse * 0.6})`;
+  ctx.lineWidth = 0.8;
+  ctx.stroke();
+  ctx.restore();
 }
 
 function drawEquippedItem(

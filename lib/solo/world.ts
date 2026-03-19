@@ -850,12 +850,13 @@ function createTiles(): Tile[] {
   addDungeonZoneProps(tiles);
   applyDecorCollisionFootprints(tiles);
 
-  // Keep central roads clean.
+  // Keep central roads clean and service points accessible.
   clearRoadProps(tiles, 23, "vertical");
   clearRoadProps(tiles, 24, "vertical");
   clearRoadProps(tiles, 23, "horizontal");
   clearRoadProps(tiles, 24, "horizontal");
   clearProtectedPathTiles(tiles);
+  unblockServicePoints(tiles);
 
   return tiles;
 }
@@ -1569,6 +1570,17 @@ function normalizeTilePropsForBiome(tiles: Tile[]): void {
   }
 }
 
+function unblockServicePoints(tiles: Tile[]): void {
+  for (const structure of getMapStructures()) {
+    if (structure.serviceX !== null && structure.serviceY !== null) {
+      const idx = idxOf(structure.serviceX, structure.serviceY);
+      if (idx >= 0 && idx < tiles.length) {
+        tiles[idx] = { ...tiles[idx], blocked: false, prop: "none" };
+      }
+    }
+  }
+}
+
 export function enforceWorldCoherence(state: SoloGameState): void {
   if (!Array.isArray(state.tiles) || state.tiles.length !== WORLD_WIDTH * WORLD_HEIGHT) return;
 
@@ -1603,14 +1615,17 @@ export function enforceWorldCoherence(state: SoloGameState): void {
     });
   }
 
+  normalizeTilePropsForBiome(state.tiles);
+
+  // Apply building collision footprints FIRST, then punch through roads and service points
+  applyDecorCollisionFootprints(state.tiles);
   clearRoadProps(state.tiles, 23, "vertical");
   clearRoadProps(state.tiles, 24, "vertical");
   clearRoadProps(state.tiles, 23, "horizontal");
   clearRoadProps(state.tiles, 24, "horizontal");
   clearProtectedPathTiles(state.tiles);
-  normalizeTilePropsForBiome(state.tiles);
+  unblockServicePoints(state.tiles);
 
-  applyDecorCollisionFootprints(state.tiles);
   normalizePlayerPosition(state);
   normalizeActorPositions(state);
 }
