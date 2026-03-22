@@ -1,7 +1,7 @@
 # World Audit Report
 
-Generated: 2026-03-18T13:17:36.260Z
-Layout: solo_map_v14
+Generated: 2026-03-22T03:08:47.057Z
+Layout: solo_map_v19
 
 Checks: map coherence, actor placement, movement budget, chunk continuity, POI geometry, label overlap, decor collisions.
 
